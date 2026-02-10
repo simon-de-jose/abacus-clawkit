@@ -254,17 +254,17 @@ async def get_cashflow(months: int = 12):
     try:
         conn = get_db()
         
-        result = conn.execute("""
+        result = conn.execute(f"""
             SELECT 
                 DATE_TRUNC('month', transaction_date) as month,
                 SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END) as income,
                 SUM(CASE WHEN amount < 0 THEN ABS(amount) ELSE 0 END) as expenses
             FROM transactions 
-            WHERE transaction_date >= CURRENT_DATE - INTERVAL '? months'
+            WHERE transaction_date >= CURRENT_DATE - INTERVAL '{months} months'
             GROUP BY DATE_TRUNC('month', transaction_date)
             ORDER BY month DESC
-            LIMIT ?
-        """, (months, months)).fetchall()
+            LIMIT {months}
+        """).fetchall()
         
         conn.close()
         
@@ -442,7 +442,7 @@ async def get_trends(months: int = 6):
     try:
         conn = get_db()
         
-        result = conn.execute("""
+        result = conn.execute(f"""
             SELECT 
                 DATE_TRUNC('month', transaction_date) as month,
                 category,
@@ -450,10 +450,10 @@ async def get_trends(months: int = 6):
             FROM transactions 
             WHERE amount < 0 
             AND category IS NOT NULL
-            AND transaction_date >= CURRENT_DATE - INTERVAL '? months'
+            AND transaction_date >= CURRENT_DATE - INTERVAL '{months} months'
             GROUP BY DATE_TRUNC('month', transaction_date), category
             ORDER BY month DESC, total DESC
-        """, (months,)).fetchall()
+        """).fetchall()
         
         conn.close()
         
