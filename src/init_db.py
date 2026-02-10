@@ -71,8 +71,12 @@ def init_database():
     
     # Create import_log table
     conn.execute("""
+        CREATE SEQUENCE IF NOT EXISTS import_log_seq START 1
+    """)
+    
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS import_log (
-            id INTEGER PRIMARY KEY,
+            id INTEGER PRIMARY KEY DEFAULT nextval('import_log_seq'),
             filename VARCHAR NOT NULL,
             file_hash VARCHAR NOT NULL UNIQUE,
             rows_imported INTEGER DEFAULT 0,
