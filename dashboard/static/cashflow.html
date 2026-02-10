@@ -38,12 +38,20 @@
     <script src="/static/components/sidebar.js"></script>
     <script src="/static/components/charts.js"></script>
     <script>
-        function setCurrentMonth() {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
+        async function setCurrentMonth() {
+            // Find latest month with data
+            const resp = await fetch('/api/transactions?per_page=1');
+            const data = await resp.json();
+            let targetDate;
+            if (data.transactions && data.transactions.length > 0) {
+                targetDate = new Date(data.transactions[0].transaction_date + 'T00:00:00');
+            } else {
+                targetDate = new Date();
+            }
+            const year = targetDate.getFullYear();
+            const month = String(targetDate.getMonth() + 1).padStart(2, '0');
             const firstDay = `${year}-${month}-01`;
-            const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+            const lastDay = new Date(year, targetDate.getMonth() + 1, 0).getDate();
             const lastDayStr = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
             
             document.getElementById('date-from').value = firstDay;

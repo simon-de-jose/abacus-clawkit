@@ -49,16 +49,29 @@ async def read_root():
 
 
 @app.get("/api/overview")
-async def get_overview():
-    """Get overview stats for current month"""
+async def get_overview(date_from: Optional[str] = None, date_to: Optional[str] = None):
+    """Get overview stats for a date range (defaults to latest month with data)"""
     try:
         conn = get_db()
         
-        # Get current month's date range
-        today = date.today()
-        month_start = date(today.year, today.month, 1)
-        _, last_day = monthrange(today.year, today.month)
-        month_end = date(today.year, today.month, last_day)
+        if date_from and date_to:
+            month_start = date.fromisoformat(date_from)
+            month_end = date.fromisoformat(date_to)
+        else:
+            # Find the latest month with data
+            latest = conn.execute("""
+                SELECT MAX(transaction_date) FROM transactions
+            """).fetchone()
+            if latest and latest[0]:
+                latest_date = latest[0]
+                month_start = date(latest_date.year, latest_date.month, 1)
+                _, last_day = monthrange(latest_date.year, latest_date.month)
+                month_end = date(latest_date.year, latest_date.month, last_day)
+            else:
+                today = date.today()
+                month_start = date(today.year, today.month, 1)
+                _, last_day = monthrange(today.year, today.month)
+                month_end = date(today.year, today.month, last_day)
         
         # Total spent (negative amounts = expenses)
         result = conn.execute("""
@@ -103,11 +116,14 @@ async def get_overview():
         
         conn.close()
         
+        month_label = month_start.strftime("%B %Y")
+        
         return JSONResponse({
             "total_spent": round(total_spent, 2),
             "total_income": round(total_income, 2),
             "net": round(net, 2),
             "transaction_count": transaction_count,
+            "month_label": month_label,
             "top_categories": [
                 {"category": row[0], "amount": round(float(row[1]), 2)}
                 for row in top_categories
@@ -211,12 +227,21 @@ async def get_category_spending(
     try:
         conn = get_db()
         
-        # Default to current month if no dates provided
+        # Default to latest month with data if no dates provided
         if not date_from or not date_to:
-            today = date.today()
-            date_from = date(today.year, today.month, 1)
-            _, last_day = monthrange(today.year, today.month)
-            date_to = date(today.year, today.month, last_day)
+            conn_temp = get_db()
+            latest = conn_temp.execute("SELECT MAX(transaction_date) FROM transactions").fetchone()
+            conn_temp.close()
+            if latest and latest[0]:
+                ld = latest[0]
+                date_from = date(ld.year, ld.month, 1)
+                _, last_day = monthrange(ld.year, ld.month)
+                date_to = date(ld.year, ld.month, last_day)
+            else:
+                today = date.today()
+                date_from = date(today.year, today.month, 1)
+                _, last_day = monthrange(today.year, today.month)
+                date_to = date(today.year, today.month, last_day)
         
         result = conn.execute("""
             SELECT 
@@ -293,12 +318,21 @@ async def get_sankey(
     try:
         conn = get_db()
         
-        # Default to current month
+        # Default to latest month with data
         if not date_from or not date_to:
-            today = date.today()
-            date_from = date(today.year, today.month, 1)
-            _, last_day = monthrange(today.year, today.month)
-            date_to = date(today.year, today.month, last_day)
+            conn_temp = get_db()
+            latest = conn_temp.execute("SELECT MAX(transaction_date) FROM transactions").fetchone()
+            conn_temp.close()
+            if latest and latest[0]:
+                ld = latest[0]
+                date_from = date(ld.year, ld.month, 1)
+                _, last_day = monthrange(ld.year, ld.month)
+                date_to = date(ld.year, ld.month, last_day)
+            else:
+                today = date.today()
+                date_from = date(today.year, today.month, 1)
+                _, last_day = monthrange(today.year, today.month)
+                date_to = date(today.year, today.month, last_day)
         
         # Get income by category
         income_data = conn.execute("""
@@ -322,63 +356,51 @@ async def get_sankey(
         
         conn.close()
         
-        # Build nodes and links for Sankey
+        # Build Sankey: Income → Category Groups → Categories
+        # Use prefixed names to avoid collisions (e.g., "Shopping" as group vs category)
         nodes = []
         links = []
-        node_index = {}
+        node_set = set()
         
-        # Add "Income" node
-        nodes.append({"name": "Income"})
-        node_index["Income"] = 0
+        def add_node(name):
+            if name not in node_set:
+                node_set.add(name)
+                nodes.append({"name": name})
         
-        # Add income category nodes and links
-        for row in income_data:
-            category = row[0]
-            amount = float(row[1])
-            if category not in node_index:
-                node_index[category] = len(nodes)
-                nodes.append({"name": category})
+        # Total expenses node
+        add_node("Total Spending")
+        
+        # Aggregate expenses by group first
+        group_totals = {}
+        for row in expenses_data:
+            group = row[0] or "Uncategorized"
+            amount = float(row[2])
+            group_totals[group] = group_totals.get(group, 0) + amount
+        
+        # Add group nodes and links from Total Spending → Groups
+        for group, total in sorted(group_totals.items(), key=lambda x: -x[1]):
+            add_node(group)
             links.append({
-                "source": node_index[category],
-                "target": node_index["Income"],
-                "value": round(amount, 2)
+                "source": "Total Spending",
+                "target": group,
+                "value": round(total, 2)
             })
         
-        # Add category group nodes
-        groups = {}
+        # Add category nodes and links from Groups → Categories
         for row in expenses_data:
-            group = row[0]
-            if group and group not in node_index:
-                node_index[group] = len(nodes)
-                nodes.append({"name": group})
-                groups[group] = 0
-        
-        # Add category nodes and links
-        for row in expenses_data:
-            group = row[0]
+            group = row[0] or "Uncategorized"
             category = row[1]
             amount = float(row[2])
             
-            if not group or not category:
+            if not category:
                 continue
             
-            # Income -> Group link
-            if "Income" in node_index and group in node_index:
-                groups[group] += amount
-            
-            # Group -> Category link
-            if category not in node_index:
-                node_index[category] = len(nodes)
-                nodes.append({"name": category})
-            
+            # Avoid self-links when category name == group name
+            display_cat = category if category != group else f"{category} (items)"
+            add_node(display_cat)
             links.append({
-                "source": node_index["Income"],
-                "target": node_index[group],
-                "value": round(amount, 2)
-            })
-            links.append({
-                "source": node_index[group],
-                "target": node_index[category],
+                "source": group,
+                "target": display_cat,
                 "value": round(amount, 2)
             })
         
@@ -401,12 +423,21 @@ async def get_top_merchants(
     try:
         conn = get_db()
         
-        # Default to current month
+        # Default to latest month with data
         if not date_from or not date_to:
-            today = date.today()
-            date_from = date(today.year, today.month, 1)
-            _, last_day = monthrange(today.year, today.month)
-            date_to = date(today.year, today.month, last_day)
+            conn_temp = get_db()
+            latest = conn_temp.execute("SELECT MAX(transaction_date) FROM transactions").fetchone()
+            conn_temp.close()
+            if latest and latest[0]:
+                ld = latest[0]
+                date_from = date(ld.year, ld.month, 1)
+                _, last_day = monthrange(ld.year, ld.month)
+                date_to = date(ld.year, ld.month, last_day)
+            else:
+                today = date.today()
+                date_from = date(today.year, today.month, 1)
+                _, last_day = monthrange(today.year, today.month)
+                date_to = date(today.year, today.month, last_day)
         
         result = conn.execute("""
             SELECT merchant, SUM(ABS(amount)) as total, COUNT(*) as count

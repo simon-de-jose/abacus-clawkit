@@ -92,15 +92,12 @@
     <script src="/static/components/charts.js"></script>
     <script src="/static/components/table.js"></script>
     <script>
-        // Set current month
-        const now = new Date();
-        const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-        document.getElementById('current-month').textContent = monthName;
-
-        // Load overview data
+        // Load overview data (uses latest month with data)
         fetch('/api/overview')
             .then(r => r.json())
             .then(data => {
+                // Set month header from the data
+                document.getElementById('current-month').textContent = data.month_label || 'Dashboard';
                 document.getElementById('total-spent').textContent = `$${data.total_spent.toFixed(2)}`;
                 document.getElementById('total-income').textContent = `$${data.total_income.toFixed(2)}`;
                 document.getElementById('net').textContent = `$${data.net.toFixed(2)}`;
