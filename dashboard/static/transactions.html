@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transactions — Abacus</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-page="Transactions">
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Transactions</h2>
+            <p>All your financial transactions</p>
+        </div>
+
+        <!-- Filters -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="filters">
+                <input type="search" id="search" placeholder="Search transactions...">
+                <select id="category-filter">
+                    <option value="">All Categories</option>
+                </select>
+                <input type="date" id="date-from" placeholder="From">
+                <input type="date" id="date-to" placeholder="To">
+                <button class="btn-primary" onclick="applyFilters()">Filter</button>
+                <button class="btn-secondary" onclick="clearFilters()">Clear</button>
+            </div>
+        </div>
+
+        <!-- Transactions Table -->
+        <div class="card">
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Merchant</th>
+                            <th>Category</th>
+                            <th>Amount</th>
+                            <th>Account</th>
+                        </tr>
+                    </thead>
+                    <tbody id="transactions-body">
+                        <tr><td colspan="5" class="loading">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="pagination-container"></div>
+        </div>
+    </div>
+
+    <script src="/static/components/sidebar.js"></script>
+    <script src="/static/components/table.js"></script>
+    <script>
+        let currentPage = 1;
+        let currentFilters = {};
+
+        // Load categories for filter dropdown
+        fetch('/api/categories')
+            .then(r => r.json())
+            .then(data => {
+                const select = document.getElementById('category-filter');
+                const categories = [...new Set(data.categories.map(c => c.category))].sort();
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    select.appendChild(option);
+                });
+            });
+
+        function loadTransactions(page = 1) {
+            currentPage = page;
+            
+            const params = new URLSearchParams({
+                page: page,
+                per_page: 50,
+                ...currentFilters
+            });
+
+            fetch(`/api/transactions?${params}`)
+                .then(r => r.json())
+                .then(data => {
+                    const tbody = document.getElementById('transactions-body');
+                    tbody.innerHTML = '';
+
+                    if (data.transactions.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem; color: var(--gray-text);">No transactions found</td></tr>';
+                        return;
+                    }
+
+                    data.transactions.forEach(txn => {
+                        const row = createTransactionRow(txn, () => {
+                            loadTransactions(currentPage); // Reload after category change
+                        });
+                        tbody.appendChild(row);
+                    });
+
+                    // Update pagination
+                    const paginationContainer = document.getElementById('pagination-container');
+                    paginationContainer.innerHTML = '';
+                    if (data.pages > 1) {
+                        const pagination = createPagination(data.page, data.pages, loadTransactions);
+                        paginationContainer.appendChild(pagination);
+                    }
+                });
+        }
+
+        function applyFilters() {
+            currentFilters = {};
+            
+            const search = document.getElementById('search').value;
+            if (search) currentFilters.search = search;
+            
+            const category = document.getElementById('category-filter').value;
+            if (category) currentFilters.category = category;
+            
+            const dateFrom = document.getElementById('date-from').value;
+            if (dateFrom) currentFilters.date_from = dateFrom;
+            
+            const dateTo = document.getElementById('date-to').value;
+            if (dateTo) currentFilters.date_to = dateTo;
+            
+            loadTransactions(1);
+        }
+
+        function clearFilters() {
+            document.getElementById('search').value = '';
+            document.getElementById('category-filter').value = '';
+            document.getElementById('date-from').value = '';
+            document.getElementById('date-to').value = '';
+            currentFilters = {};
+            loadTransactions(1);
+        }
+
+        // Add enter key support for search
+        document.getElementById('search').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') applyFilters();
+        });
+
+        // Initial load
+        loadTransactions(1);
+    </script>
+</body>
+</html>

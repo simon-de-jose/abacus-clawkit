@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounts — Abacus</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body data-page="Accounts">
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Accounts</h2>
+            <p>Connected accounts and import history</p>
+        </div>
+
+        <!-- Accounts List -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <h3 class="card-title">Connected Accounts</h3>
+            <div class="table-wrapper">
+                <table id="accounts-table">
+                    <thead>
+                        <tr>
+                            <th>Bank</th>
+                            <th>Account</th>
+                            <th>Type</th>
+                            <th>Last 4</th>
+                            <th>Transactions</th>
+                            <th>Last Transaction</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="6" class="loading">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Import History -->
+        <div class="card">
+            <h3 class="card-title">Import History</h3>
+            <div class="table-wrapper">
+                <table id="import-history">
+                    <thead>
+                        <tr>
+                            <th>Filename</th>
+                            <th>Imported</th>
+                            <th>Skipped</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr><td colspan="4" class="loading">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Import Instructions -->
+        <div class="card" style="margin-top: 1.5rem; background: #F0F7FF; border-left: 4px solid var(--blue);">
+            <h3 class="card-title">How to Import Transactions</h3>
+            <ol style="margin-left: 1.5rem; color: var(--gray-text); line-height: 1.8;">
+                <li>Download your bank statement as CSV from your bank's website</li>
+                <li>Place the CSV file in: <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">/Users/ye/Library/Mobile Documents/com~apple~CloudDocs/data-for-jose/abacus-imports/</code></li>
+                <li>Or run manually: <code style="background: white; padding: 0.25rem 0.5rem; border-radius: 4px; font-family: monospace;">python3 src/import_csv.py path/to/file.csv</code></li>
+                <li>Refresh this page to see the import appear in the history below</li>
+            </ol>
+            <p style="margin-top: 1rem; font-size: 0.875rem; color: var(--gray-text);">
+                <strong>Note:</strong> Duplicate files and transactions are automatically detected and skipped.
+            </p>
+        </div>
+    </div>
+
+    <script src="/static/components/sidebar.js"></script>
+    <script src="/static/components/table.js"></script>
+    <script>
+        // Load accounts and import history
+        fetch('/api/accounts')
+            .then(r => r.json())
+            .then(data => {
+                // Populate accounts table
+                const accountsBody = document.querySelector('#accounts-table tbody');
+                accountsBody.innerHTML = '';
+                
+                if (data.accounts.length === 0) {
+                    accountsBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--gray-text);">No accounts found. Import a CSV file to get started.</td></tr>';
+                } else {
+                    data.accounts.forEach(account => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td style="font-weight: 600;">${account.bank}</td>
+                            <td>${account.name}</td>
+                            <td><span class="badge category">${account.type}</span></td>
+                            <td style="font-family: monospace;">****${account.last_four}</td>
+                            <td>${account.transaction_count}</td>
+                            <td>${account.last_transaction ? formatDate(account.last_transaction) : '—'}</td>
+                        `;
+                        accountsBody.appendChild(row);
+                    });
+                }
+
+                // Populate import history
+                const importBody = document.querySelector('#import-history tbody');
+                importBody.innerHTML = '';
+                
+                if (data.imports.length === 0) {
+                    importBody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 2rem; color: var(--gray-text);">No imports yet</td></tr>';
+                } else {
+                    data.imports.forEach(imp => {
+                        const row = document.createElement('tr');
+                        const importedAt = new Date(imp.imported_at);
+                        row.innerHTML = `
+                            <td style="font-family: monospace; font-size: 0.875rem;">${imp.filename}</td>
+                            <td style="color: var(--green); font-weight: 600;">${imp.rows_imported}</td>
+                            <td style="color: var(--gray-text);">${imp.rows_skipped}</td>
+                            <td>${importedAt.toLocaleString()}</td>
+                        `;
+                        importBody.appendChild(row);
+                    });
+                }
+            });
+    </script>
+</body>
+</html>

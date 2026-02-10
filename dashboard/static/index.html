@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Abacus</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body data-page="Dashboard">
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Dashboard</h2>
+            <p id="current-month">Loading...</p>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="summary-grid">
+            <div class="card summary-card spent">
+                <div class="label">Total Spent</div>
+                <div class="value" id="total-spent">$0.00</div>
+                <div class="subtitle">This month</div>
+            </div>
+            <div class="card summary-card income">
+                <div class="label">Total Income</div>
+                <div class="value" id="total-income">$0.00</div>
+                <div class="subtitle">This month</div>
+            </div>
+            <div class="card summary-card net">
+                <div class="label">Net</div>
+                <div class="value" id="net">$0.00</div>
+                <div class="subtitle">Income - Expenses</div>
+            </div>
+            <div class="card summary-card">
+                <div class="label">Transactions</div>
+                <div class="value" id="transaction-count">0</div>
+                <div class="subtitle">This month</div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-2">
+            <div class="card">
+                <div id="spending-by-category" class="chart-container"></div>
+            </div>
+            <div class="card">
+                <div id="monthly-trend" class="chart-container"></div>
+            </div>
+        </div>
+
+        <!-- Recent Transactions & Top Merchants -->
+        <div class="grid grid-2" style="margin-top: 1.5rem;">
+            <div class="card">
+                <h3 class="card-title">Recent Transactions</h3>
+                <div class="table-wrapper">
+                    <table id="recent-transactions">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Merchant</th>
+                                <th>Category</th>
+                                <th>Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="4" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <h3 class="card-title">Top Merchants</h3>
+                <div class="table-wrapper">
+                    <table id="top-merchants">
+                        <thead>
+                            <tr>
+                                <th>Merchant</th>
+                                <th>Transactions</th>
+                                <th>Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td colspan="3" class="loading">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/components/sidebar.js"></script>
+    <script src="/static/components/charts.js"></script>
+    <script src="/static/components/table.js"></script>
+    <script>
+        // Set current month
+        const now = new Date();
+        const monthName = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        document.getElementById('current-month').textContent = monthName;
+
+        // Load overview data
+        fetch('/api/overview')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('total-spent').textContent = `$${data.total_spent.toFixed(2)}`;
+                document.getElementById('total-income').textContent = `$${data.total_income.toFixed(2)}`;
+                document.getElementById('net').textContent = `$${data.net.toFixed(2)}`;
+                document.getElementById('transaction-count').textContent = data.transaction_count;
+
+                // Spending by category donut chart
+                if (data.top_categories.length > 0) {
+                    const chartData = data.top_categories.map(c => ({
+                        name: c.category,
+                        value: c.amount
+                    }));
+                    createDonutChart('spending-by-category', chartData, 'Spending by Category');
+                }
+            });
+
+        // Load cashflow for monthly trend
+        fetch('/api/cashflow?months=6')
+            .then(r => r.json())
+            .then(data => {
+                const reversed = data.cashflow.reverse();
+                const months = reversed.map(m => {
+                    const date = new Date(m.month);
+                    return date.toLocaleDateString('en-US', { month: 'short' });
+                });
+                const amounts = reversed.map(m => m.expenses);
+                
+                createBarChart('monthly-trend', months, amounts, 'Monthly Spending (Last 6 Months)');
+            });
+
+        // Load recent transactions
+        fetch('/api/transactions?per_page=10')
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.querySelector('#recent-transactions tbody');
+                tbody.innerHTML = '';
+                
+                data.transactions.forEach(txn => {
+                    const row = document.createElement('tr');
+                    const isNegative = txn.amount < 0;
+                    row.innerHTML = `
+                        <td>${formatDate(txn.transaction_date)}</td>
+                        <td>${txn.merchant || txn.description}</td>
+                        <td>${txn.category || '—'}</td>
+                        <td class="amount ${isNegative ? 'negative' : 'positive'}">
+                            ${formatCurrency(txn.amount)}
+                        </td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            });
+
+        // Load top merchants
+        fetch('/api/merchants/top?limit=5')
+            .then(r => r.json())
+            .then(data => {
+                const tbody = document.querySelector('#top-merchants tbody');
+                tbody.innerHTML = '';
+                
+                data.merchants.forEach(merchant => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${merchant.merchant}</td>
+                        <td>${merchant.count}</td>
+                        <td class="amount negative">$${merchant.total.toFixed(2)}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            });
+    </script>
+</body>
+</html>

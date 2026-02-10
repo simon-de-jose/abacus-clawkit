@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cash Flow — Abacus</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+</head>
+<body data-page="Cash Flow">
+    <div class="main-content">
+        <div class="page-header">
+            <h2>Cash Flow</h2>
+            <p>Income and expense flow visualization</p>
+        </div>
+
+        <!-- Date Range Selector -->
+        <div class="card" style="margin-bottom: 1.5rem;">
+            <div class="filters">
+                <input type="date" id="date-from" placeholder="From">
+                <input type="date" id="date-to" placeholder="To">
+                <button class="btn-primary" onclick="loadSankey()">Update</button>
+                <button class="btn-secondary" onclick="setCurrentMonth()">Current Month</button>
+            </div>
+        </div>
+
+        <!-- Sankey Diagram -->
+        <div class="card">
+            <div id="sankey-chart" class="chart-container large"></div>
+        </div>
+
+        <!-- Monthly Income vs Expenses -->
+        <div class="card" style="margin-top: 1.5rem;">
+            <div id="cashflow-chart" class="chart-container"></div>
+        </div>
+    </div>
+
+    <script src="/static/components/sidebar.js"></script>
+    <script src="/static/components/charts.js"></script>
+    <script>
+        function setCurrentMonth() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const firstDay = `${year}-${month}-01`;
+            const lastDay = new Date(year, now.getMonth() + 1, 0).getDate();
+            const lastDayStr = `${year}-${month}-${String(lastDay).padStart(2, '0')}`;
+            
+            document.getElementById('date-from').value = firstDay;
+            document.getElementById('date-to').value = lastDayStr;
+            
+            loadSankey();
+        }
+
+        function loadSankey() {
+            const dateFrom = document.getElementById('date-from').value;
+            const dateTo = document.getElementById('date-to').value;
+            
+            const params = new URLSearchParams();
+            if (dateFrom) params.append('date_from', dateFrom);
+            if (dateTo) params.append('date_to', dateTo);
+            
+            fetch(`/api/cashflow/sankey?${params}`)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.nodes && data.links) {
+                        createSankeyChart('sankey-chart', data.nodes, data.links, 'Money Flow');
+                    }
+                });
+        }
+
+        // Load monthly cashflow
+        fetch('/api/cashflow?months=12')
+            .then(r => r.json())
+            .then(data => {
+                const reversed = data.cashflow.reverse();
+                const months = reversed.map(m => {
+                    const date = new Date(m.month);
+                    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                });
+                
+                const series = [
+                    {
+                        name: 'Income',
+                        data: reversed.map(m => m.income)
+                    },
+                    {
+                        name: 'Expenses',
+                        data: reversed.map(m => m.expenses)
+                    }
+                ];
+                
+                createStackedBarChart('cashflow-chart', months, series, 'Monthly Income vs Expenses (Last 12 Months)');
+            });
+
+        // Initialize with current month
+        setCurrentMonth();
+    </script>
+</body>
+</html>
