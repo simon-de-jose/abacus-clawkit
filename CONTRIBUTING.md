@@ -56,6 +56,13 @@ Import the test CSV and verify:
 - Dashboard loads without errors
 - Charts render with real data
 
+## PR Workflow
+
+- Create feature branch, implement fix, push, open PR
+- **Self-merge after verifying** — no review from another agent needed
+- Always verify visually (run the dashboard, test in browser) before merging
+- Squash merge to keep history clean
+
 ## Commit Guidelines
 
 - Use conventional commits: `feat:`, `fix:`, `docs:`, `style:`
