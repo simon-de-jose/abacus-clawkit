@@ -91,6 +91,8 @@ body {
 .main-content {
     margin-left: 240px;
     flex: 1;
+    min-width: 0;
+    overflow-x: hidden;
     padding: 2rem 3rem;
 }
 
@@ -132,7 +134,7 @@ body {
 /* Summary Cards Grid */
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 1rem;
     margin-bottom: 1.5rem;
 }
@@ -344,6 +346,10 @@ button, .btn {
 .grid {
     display: grid;
     gap: 1.5rem;
+}
+
+.grid > * {
+    min-width: 0;
 }
 
 .grid-2 {
