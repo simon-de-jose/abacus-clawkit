@@ -2,10 +2,10 @@
 # Environment variables: ABACUS_DB_PATH, ABACUS_IMPORT_DIR
 
 database:
-  path: "/Users/ye/clawd/userdata/abacus/abacus.duckdb"
+  path: "./data/abacus.duckdb"
 
 import:
-  watch_folder: "/Users/ye/Library/Mobile Documents/com~apple~CloudDocs/data-for-jose/abacus-imports/"
+  watch_folder: "./imports"
   supported_banks:
     - chase
   

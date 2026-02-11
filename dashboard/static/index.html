@@ -14,6 +14,33 @@
             <p id="current-month">Loading...</p>
         </div>
 
+        <!-- Year-to-Date Summary -->
+        <div class="page-header" style="margin-top: 1rem;">
+            <h3 style="font-size: 1.25rem; color: var(--navy);" id="ytd-header">2026 Year to Date</h3>
+        </div>
+        <div class="summary-grid" id="ytd-summary" style="margin-bottom: 1.5rem;">
+            <div class="card summary-card spent">
+                <div class="label">YTD Spent</div>
+                <div class="value" id="ytd-spent">$0.00</div>
+                <div class="subtitle" id="ytd-months">0 months</div>
+            </div>
+            <div class="card summary-card income">
+                <div class="label">YTD Income</div>
+                <div class="value" id="ytd-income">$0.00</div>
+                <div class="subtitle">Year to date</div>
+            </div>
+            <div class="card summary-card net">
+                <div class="label">YTD Net</div>
+                <div class="value" id="ytd-net">$0.00</div>
+                <div class="subtitle">Income - Expenses</div>
+            </div>
+            <div class="card summary-card">
+                <div class="label">Avg Monthly</div>
+                <div class="value" id="ytd-avg">$0.00</div>
+                <div class="subtitle">Average spend/month</div>
+            </div>
+        </div>
+
         <!-- Summary Cards -->
         <div class="summary-grid">
             <div class="card summary-card spent">
@@ -39,10 +66,17 @@
         </div>
 
         <!-- Charts Row -->
-        <div class="grid grid-2">
+        <div class="grid grid-2" style="margin-bottom: 1.5rem;">
+            <div class="card">
+                <div id="ytd-spending-pie" class="chart-container"></div>
+            </div>
             <div class="card">
                 <div id="spending-by-category" class="chart-container"></div>
             </div>
+        </div>
+
+        <!-- Monthly Trend -->
+        <div class="grid grid-2">
             <div class="card">
                 <div id="monthly-trend" class="chart-container"></div>
             </div>
@@ -92,6 +126,29 @@
     <script src="/static/components/charts.js"></script>
     <script src="/static/components/table.js"></script>
     <script>
+        // Load YTD overview
+        fetch('/api/overview/ytd')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('ytd-header').textContent = `${data.year} Year to Date`;
+                document.getElementById('ytd-spent').textContent = `$${data.total_spent_ytd.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+                document.getElementById('ytd-income').textContent = `$${data.total_income_ytd.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+                document.getElementById('ytd-net').textContent = `$${data.net_ytd.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+                document.getElementById('ytd-avg').textContent = `$${data.avg_monthly_spend.toLocaleString('en-US', {minimumFractionDigits: 2})}`;
+                document.getElementById('ytd-months').textContent = `${data.months_counted} months`;
+                
+                // YTD Spending pie chart by category group
+                if (data.spending_by_group.length > 0) {
+                    const chartData = data.spending_by_group.map(g => ({
+                        name: g.group,
+                        value: g.amount
+                    }));
+                    createDonutChart('ytd-spending-pie', chartData, 'YTD Spending by Category');
+                } else {
+                    document.getElementById('ytd-spending-pie').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">No spending data</div>';
+                }
+            });
+
         // Load overview data (uses latest month with data)
         fetch('/api/overview')
             .then(r => r.json())
@@ -110,6 +167,8 @@
                         value: c.amount
                     }));
                     createDonutChart('spending-by-category', chartData, 'Spending by Category');
+                } else {
+                    document.getElementById('spending-by-category').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">No categorized spending data yet</div>';
                 }
             });
 
@@ -117,14 +176,18 @@
         fetch('/api/cashflow?months=6')
             .then(r => r.json())
             .then(data => {
-                const reversed = data.cashflow.reverse();
-                const months = reversed.map(m => {
-                    const date = new Date(m.month);
-                    return date.toLocaleDateString('en-US', { month: 'short' });
-                });
-                const amounts = reversed.map(m => m.expenses);
-                
-                createBarChart('monthly-trend', months, amounts, 'Monthly Spending (Last 6 Months)');
+                if (data.cashflow && data.cashflow.length > 0) {
+                    const reversed = data.cashflow.reverse();
+                    const months = reversed.map(m => {
+                        const date = new Date(m.month);
+                        return date.toLocaleDateString('en-US', { month: 'short' });
+                    });
+                    const amounts = reversed.map(m => m.expenses);
+                    
+                    createBarChart('monthly-trend', months, amounts, 'Monthly Spending (Last 6 Months)');
+                } else {
+                    document.getElementById('monthly-trend').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">No trend data available</div>';
+                }
             });
 
         // Load recent transactions
@@ -134,19 +197,23 @@
                 const tbody = document.querySelector('#recent-transactions tbody');
                 tbody.innerHTML = '';
                 
-                data.transactions.forEach(txn => {
-                    const row = document.createElement('tr');
-                    const isNegative = txn.amount < 0;
-                    row.innerHTML = `
-                        <td>${formatDate(txn.transaction_date)}</td>
-                        <td>${txn.merchant || txn.description}</td>
-                        <td>${txn.category || '—'}</td>
-                        <td class="amount ${isNegative ? 'negative' : 'positive'}">
-                            ${formatCurrency(txn.amount)}
-                        </td>
-                    `;
-                    tbody.appendChild(row);
-                });
+                if (data.transactions && data.transactions.length > 0) {
+                    data.transactions.forEach(txn => {
+                        const row = document.createElement('tr');
+                        const isNegative = txn.amount < 0;
+                        row.innerHTML = `
+                            <td>${formatDate(txn.transaction_date)}</td>
+                            <td>${txn.merchant || txn.description}</td>
+                            <td>${txn.category || '—'}</td>
+                            <td class="amount ${isNegative ? 'negative' : 'positive'}">
+                                ${formatCurrency(txn.amount)}
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">No transactions available</td></tr>';
+                }
             });
 
         // Load top merchants
@@ -156,15 +223,19 @@
                 const tbody = document.querySelector('#top-merchants tbody');
                 tbody.innerHTML = '';
                 
-                data.merchants.forEach(merchant => {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td>${merchant.merchant}</td>
-                        <td>${merchant.count}</td>
-                        <td class="amount negative">$${merchant.total.toFixed(2)}</td>
-                    `;
-                    tbody.appendChild(row);
-                });
+                if (data.merchants && data.merchants.length > 0) {
+                    data.merchants.forEach(merchant => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${merchant.merchant}</td>
+                            <td>${merchant.count}</td>
+                            <td class="amount negative">$${merchant.total.toFixed(2)}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#999;">No merchant data available</td></tr>';
+                }
             });
     </script>
 </body>

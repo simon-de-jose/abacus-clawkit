@@ -50,35 +50,44 @@ Personal finance tracker inspired by Monarch Money. Built with FastAPI, DuckDB, 
 ## Quick Start
 
 ```bash
-# 1. Setup virtual environment
-cd /Users/ye/Projects/abacus-clawkit
+# 1. Clone and setup virtual environment
+cd abacus-clawkit
 python3 -m venv .venv
 source .venv/bin/activate
 
 # 2. Install dependencies
 pip3 install -r requirements.txt
 
-# 3. Initialize database
+# 3. (Optional) Configure custom paths
+cp .env.example .env
+# Edit .env to set ABACUS_DB_PATH and ABACUS_IMPORT_DIR
+
+# 4. Initialize database
 python3 src/init_db.py
 
-# 4. Import transactions
+# 5. Import transactions
 python3 src/import_csv.py sample_data.csv
 
-# 5. Start dashboard
+# 6. Start dashboard
 cd dashboard
 uvicorn main:app --host 0.0.0.0 --port 3001 --reload
 ```
 
 Dashboard will be available at: **http://localhost:3001**
 
-## Importing from iCloud
+## Configuration
 
-Place CSV files in:
-```
-/Users/ye/Library/Mobile Documents/com~apple~CloudDocs/data-for-jose/abacus-imports/
-```
+### Environment Variables
 
-Then run:
+Set these in `.env` or your shell to override defaults:
+
+- `ABACUS_DB_PATH` — Database location (default: `./data/abacus.duckdb`)
+- `ABACUS_IMPORT_DIR` — Import watch folder (default: `./imports`)
+
+### Importing Transactions
+
+Place CSV files in your import folder (configured in `config.yaml` or `ABACUS_IMPORT_DIR`), then:
+
 ```bash
 python3 src/import_csv.py
 # Or specify a file:
@@ -160,7 +169,7 @@ All categories (for dropdowns)
 
 ## Database
 
-**Location:** `/Users/ye/clawd/userdata/abacus/abacus.duckdb`
+**Location:** Configured via `ABACUS_DB_PATH` environment variable or `config.yaml` (default: `./data/abacus.duckdb`)
 
 **Schema:**
 - `accounts` — id, name, bank, last_four, type
@@ -171,7 +180,9 @@ All categories (for dropdowns)
 **Query Example:**
 ```python
 import duckdb
-conn = duckdb.connect('/Users/ye/clawd/userdata/abacus/abacus.duckdb')
+from src.config import get_db_path
+
+conn = duckdb.connect(str(get_db_path()))
 result = conn.execute("SELECT * FROM transactions LIMIT 10").fetchall()
 ```
 
@@ -180,7 +191,8 @@ result = conn.execute("SELECT * FROM transactions LIMIT 10").fetchall()
 ### Option 1: Update init_db.py
 Add to the `merchant_mappings` list in `src/init_db.py`, then:
 ```bash
-rm /Users/ye/clawd/userdata/abacus/abacus.duckdb*
+# Remove existing database and reinitialize
+rm data/abacus.duckdb*  # or your configured ABACUS_DB_PATH
 python3 src/init_db.py
 python3 src/import_csv.py sample_data.csv
 ```

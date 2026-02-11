@@ -9,7 +9,18 @@ from typing import List, Dict
 
 from config import get_db_path, get_import_folder
 from parsers import chase
+from parsers import boa
+from parsers import citi
 from categorizer import apply_categorization
+
+def detect_bank(file_path: str) -> str:
+    """Auto-detect bank format from CSV headers"""
+    if boa.detect(file_path):
+        return "boa"
+    if citi.detect(file_path):
+        return "citi"
+    # Default to Chase
+    return "chase"
 
 def calculate_file_hash(file_path: Path) -> str:
     """Calculate SHA256 hash of file"""
@@ -43,7 +54,7 @@ def get_or_create_account(conn: duckdb.DuckDBPyConnection, bank: str, last_four:
     
     return account_id
 
-def import_csv(file_path: str, bank: str = "Chase") -> Dict:
+def import_csv(file_path: str, bank: str = None) -> Dict:
     """Import CSV file with deduplication
     
     Returns: dict with import stats
@@ -53,8 +64,13 @@ def import_csv(file_path: str, bank: str = "Chase") -> Dict:
     if not file_path.exists():
         raise FileNotFoundError(f"File not found: {file_path}")
     
+    # Auto-detect bank if not specified
+    if bank is None:
+        bank = detect_bank(str(file_path))
+    
+    bank_labels = {"chase": "Chase", "boa": "Bank of America", "citi": "Citi"}
     print(f"\n📁 Importing: {file_path.name}")
-    print(f"   Bank: {bank}")
+    print(f"   Bank: {bank_labels.get(bank.lower(), bank)}")
     
     # Calculate file hash
     file_hash = calculate_file_hash(file_path)
@@ -72,6 +88,13 @@ def import_csv(file_path: str, bank: str = "Chase") -> Dict:
     if existing:
         print(f"   ⚠️  File already imported: {existing[0]} at {existing[1]}")
         conn.close()
+        # Still move to imported/ subfolder
+        imported_dir = file_path.parent / "imported"
+        imported_dir.mkdir(exist_ok=True)
+        dest = imported_dir / file_path.name
+        if not dest.exists():
+            file_path.rename(dest)
+            print(f"   📂 Moved to: imported/{file_path.name}")
         return {
             'filename': file_path.name,
             'rows_imported': 0,
@@ -80,8 +103,13 @@ def import_csv(file_path: str, bank: str = "Chase") -> Dict:
         }
     
     # Parse CSV based on bank
-    if bank.lower() == "chase":
+    bank_key = bank.lower()
+    if bank_key == "chase":
         transactions = chase.parse(str(file_path))
+    elif bank_key == "boa":
+        transactions = boa.parse(str(file_path))
+    elif bank_key == "citi":
+        transactions = citi.parse(str(file_path))
     else:
         raise ValueError(f"Unsupported bank: {bank}")
     
@@ -149,6 +177,19 @@ def import_csv(file_path: str, bank: str = "Chase") -> Dict:
     if rows_skipped > 0:
         print(f"   ⏭️  Skipped: {rows_skipped} duplicates")
     
+    # Move file to imported/ subfolder
+    imported_dir = file_path.parent / "imported"
+    imported_dir.mkdir(exist_ok=True)
+    dest = imported_dir / file_path.name
+    if dest.exists():
+        # Add timestamp to avoid collisions
+        stem = file_path.stem
+        suffix = file_path.suffix
+        ts = datetime.now().strftime("%Y%m%d%H%M%S")
+        dest = imported_dir / f"{stem}_{ts}{suffix}"
+    file_path.rename(dest)
+    print(f"   📂 Moved to: {dest.relative_to(file_path.parent)}")
+    
     return {
         'filename': file_path.name,
         'rows_imported': rows_imported,
@@ -180,7 +221,7 @@ def import_folder(folder_path: str = None):
     total_skipped = 0
     
     for csv_file in csv_files:
-        result = import_csv(str(csv_file), bank="Chase")
+        result = import_csv(str(csv_file))
         total_imported += result['rows_imported']
         total_skipped += result['rows_skipped']
     

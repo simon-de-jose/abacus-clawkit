@@ -9,9 +9,15 @@ venv/
 ENV/
 env/
 
-# Database
+# Environment
+.env
+config.yaml
+
+# Database & Data
 *.duckdb
 *.duckdb.wal
+data/
+imports/
 
 # IDE
 .vscode/

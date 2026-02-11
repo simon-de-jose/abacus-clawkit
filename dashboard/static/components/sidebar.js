@@ -2,11 +2,11 @@
 
 function createSidebar(activePage) {
     const pages = [
-        { name: 'Dashboard', path: 'index.html', icon: '📊' },
-        { name: 'Transactions', path: 'transactions.html', icon: '💳' },
-        { name: 'Cash Flow', path: 'cashflow.html', icon: '💰' },
-        { name: 'Reports', path: 'reports.html', icon: '📈' },
-        { name: 'Accounts', path: 'accounts.html', icon: '🏦' }
+        { name: 'Dashboard', path: '/', icon: '📊' },
+        { name: 'Transactions', path: '/transactions', icon: '💳' },
+        { name: 'Cash Flow', path: '/cashflow', icon: '💰' },
+        { name: 'Reports', path: '/reports', icon: '📈' },
+        { name: 'Accounts', path: '/accounts', icon: '🏦' }
     ];
     
     const sidebar = document.createElement('div');

@@ -48,6 +48,26 @@ async def read_root():
     return FileResponse("static/index.html")
 
 
+@app.get("/transactions")
+async def read_transactions():
+    return FileResponse("static/transactions.html")
+
+
+@app.get("/cashflow")
+async def read_cashflow():
+    return FileResponse("static/cashflow.html")
+
+
+@app.get("/reports")
+async def read_reports():
+    return FileResponse("static/reports.html")
+
+
+@app.get("/accounts")
+async def read_accounts():
+    return FileResponse("static/accounts.html")
+
+
 @app.get("/api/overview")
 async def get_overview(date_from: Optional[str] = None, date_to: Optional[str] = None):
     """Get overview stats for a date range (defaults to latest month with data)"""
@@ -131,6 +151,64 @@ async def get_overview(date_from: Optional[str] = None, date_to: Optional[str] =
         })
     except Exception as e:
         print(f"Error in /api/overview: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/overview/ytd")
+async def get_overview_ytd():
+    """Get Year-to-Date overview stats"""
+    try:
+        conn = get_db()
+        # Get current year
+        current_year = date.today().year
+        year_start = date(current_year, 1, 1)
+        
+        # Total spent YTD
+        result = conn.execute("""
+            SELECT SUM(ABS(amount)) FROM transactions 
+            WHERE amount < 0 AND transaction_date >= ?
+        """, (year_start,)).fetchone()
+        total_spent = float(result[0]) if result[0] else 0.0
+        
+        # Total income YTD
+        result = conn.execute("""
+            SELECT SUM(amount) FROM transactions 
+            WHERE amount > 0 AND transaction_date >= ?
+        """, (year_start,)).fetchone()
+        total_income = float(result[0]) if result[0] else 0.0
+        
+        # Spending by category_group YTD (high-level: Dining, Grocery level, NOT boba/coffee level)
+        # IMPORTANT: Include NULL categories as "Uncategorized"
+        groups = conn.execute("""
+            SELECT COALESCE(category_group, 'Uncategorized') as grp, SUM(ABS(amount)) as total
+            FROM transactions 
+            WHERE amount < 0 AND transaction_date >= ?
+            GROUP BY grp
+            ORDER BY total DESC
+        """, (year_start,)).fetchall()
+        
+        # Count months with data for average
+        months_result = conn.execute("""
+            SELECT COUNT(DISTINCT DATE_TRUNC('month', transaction_date))
+            FROM transactions WHERE transaction_date >= ?
+        """, (year_start,)).fetchone()
+        months_count = max(int(months_result[0]), 1)
+        
+        conn.close()
+        return JSONResponse({
+            "total_spent_ytd": round(total_spent, 2),
+            "total_income_ytd": round(total_income, 2),
+            "net_ytd": round(total_income - total_spent, 2),
+            "avg_monthly_spend": round(total_spent / months_count, 2),
+            "months_counted": months_count,
+            "year": current_year,
+            "spending_by_group": [
+                {"group": row[0], "amount": round(float(row[1]), 2)}
+                for row in groups
+            ]
+        })
+    except Exception as e:
+        print(f"Error in /api/overview/ytd: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -336,22 +414,23 @@ async def get_sankey(
         
         # Get income by category
         income_data = conn.execute("""
-            SELECT category, SUM(amount) as total
+            SELECT COALESCE(category, 'Uncategorized'), SUM(amount) as total
             FROM transactions 
             WHERE amount > 0 
-            AND category IS NOT NULL
             AND transaction_date >= ? AND transaction_date <= ?
             GROUP BY category
         """, (date_from, date_to)).fetchall()
         
         # Get expenses by category group and category
         expenses_data = conn.execute("""
-            SELECT category_group, category, SUM(ABS(amount)) as total
+            SELECT 
+                COALESCE(category_group, 'Uncategorized') as grp,
+                COALESCE(category, 'Uncategorized') as cat,
+                SUM(ABS(amount)) as total
             FROM transactions 
             WHERE amount < 0 
-            AND category IS NOT NULL
             AND transaction_date >= ? AND transaction_date <= ?
-            GROUP BY category_group, category
+            GROUP BY grp, cat
         """, (date_from, date_to)).fetchall()
         
         conn.close()

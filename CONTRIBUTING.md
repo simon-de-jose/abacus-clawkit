@@ -4,18 +4,24 @@
 
 1. **Clone & setup:**
    ```bash
-   cd /Users/ye/Projects/abacus-clawkit
+   cd abacus-clawkit
    python3 -m venv .venv
    source .venv/bin/activate
    pip3 install -r requirements.txt
    ```
 
-2. **Initialize database:**
+2. **Configure (optional):**
+   ```bash
+   cp .env.example .env
+   # Edit .env to set custom ABACUS_DB_PATH and ABACUS_IMPORT_DIR
+   ```
+
+3. **Initialize database:**
    ```bash
    python3 src/init_db.py
    ```
 
-3. **Run development server:**
+4. **Run development server:**
    ```bash
    cd dashboard
    uvicorn main:app --host 0.0.0.0 --port 3001 --reload

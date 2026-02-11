@@ -71,8 +71,10 @@
             fetch(`/api/cashflow/sankey?${params}`)
                 .then(r => r.json())
                 .then(data => {
-                    if (data.nodes && data.links) {
+                    if (data.nodes && data.links && data.nodes.length > 0) {
                         createSankeyChart('sankey-chart', data.nodes, data.links, 'Money Flow');
+                    } else {
+                        document.getElementById('sankey-chart').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">No flow data available for this period</div>';
                     }
                 });
         }
@@ -81,24 +83,28 @@
         fetch('/api/cashflow?months=12')
             .then(r => r.json())
             .then(data => {
-                const reversed = data.cashflow.reverse();
-                const months = reversed.map(m => {
-                    const date = new Date(m.month);
-                    return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
-                });
-                
-                const series = [
-                    {
-                        name: 'Income',
-                        data: reversed.map(m => m.income)
-                    },
-                    {
-                        name: 'Expenses',
-                        data: reversed.map(m => m.expenses)
-                    }
-                ];
-                
-                createStackedBarChart('cashflow-chart', months, series, 'Monthly Income vs Expenses (Last 12 Months)');
+                if (data.cashflow && data.cashflow.length > 0) {
+                    const reversed = data.cashflow.reverse();
+                    const months = reversed.map(m => {
+                        const date = new Date(m.month);
+                        return date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+                    });
+                    
+                    const series = [
+                        {
+                            name: 'Income',
+                            data: reversed.map(m => m.income)
+                        },
+                        {
+                            name: 'Expenses',
+                            data: reversed.map(m => m.expenses)
+                        }
+                    ];
+                    
+                    createStackedBarChart('cashflow-chart', months, series, 'Monthly Income vs Expenses (Last 12 Months)');
+                } else {
+                    document.getElementById('cashflow-chart').innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">No monthly data available</div>';
+                }
             });
 
         // Initialize with current month

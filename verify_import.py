@@ -1,6 +1,7 @@
 import duckdb
+from src.config import get_db_path
 
-conn = duckdb.connect('/Users/ye/clawd/userdata/abacus/abacus.duckdb')
+conn = duckdb.connect(str(get_db_path()))
 
 print('Total transactions:', conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0])
 print('Categorized:', conn.execute('SELECT COUNT(*) FROM transactions WHERE merchant IS NOT NULL').fetchone()[0])

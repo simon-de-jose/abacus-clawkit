@@ -132,13 +132,15 @@ body {
 /* Summary Cards Grid */
 .summary-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem;
     margin-bottom: 2rem;
 }
 
 .summary-card {
     padding: 1.5rem;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .summary-card .label {
@@ -153,6 +155,9 @@ body {
     font-size: 2rem;
     font-weight: 700;
     margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .summary-card.spent .value {
@@ -350,6 +355,12 @@ button, .btn {
 
 .grid-3 {
     grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+    .summary-card .value {
+        font-size: 1.5rem;
+    }
 }
 
 @media (max-width: 1024px) {
