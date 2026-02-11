@@ -65,19 +65,21 @@
             </div>
         </div>
 
-        <!-- Charts Row -->
+        <!-- Charts Row: Pie + Bar side by side -->
         <div class="grid grid-2" style="margin-bottom: 1.5rem;" id="charts-row">
             <div class="card" id="ytd-pie-card">
                 <div id="ytd-spending-pie" class="chart-container"></div>
             </div>
-            <div class="card" id="monthly-category-card">
-                <div id="spending-by-category" class="chart-container"></div>
+            <div class="card">
+                <div id="monthly-trend" class="chart-container"></div>
             </div>
         </div>
 
-        <!-- Monthly Trend -->
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div id="monthly-trend" class="chart-container"></div>
+        <!-- Monthly Category Donut (if data exists) -->
+        <div class="grid grid-2" style="margin-bottom: 1.5rem;" id="monthly-charts-row">
+            <div class="card" id="monthly-category-card">
+                <div id="spending-by-category" class="chart-container"></div>
+            </div>
         </div>
 
         <!-- Recent Transactions & Top Merchants -->
