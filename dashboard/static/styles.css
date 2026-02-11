@@ -36,6 +36,7 @@ body {
     position: fixed;
     height: 100vh;
     overflow-y: auto;
+    z-index: 10;
 }
 
 .sidebar-header {
@@ -92,7 +93,6 @@ body {
     margin-left: 240px;
     flex: 1;
     min-width: 0;
-    overflow-x: hidden;
     padding: 2rem 3rem;
 }
 
@@ -111,13 +111,14 @@ body {
     color: var(--gray-text);
 }
 
-/* Cards */
+/* Cards — container query context */
 .card {
     background: var(--white);
     border-radius: 12px;
     padding: 1.5rem;
     box-shadow: var(--shadow);
     transition: box-shadow 0.2s;
+    container-type: inline-size;
 }
 
 .card:hover {
@@ -175,23 +176,21 @@ body {
     color: var(--gray-text);
 }
 
-/* Charts */
+/* Charts — fluid height, no overflow clipping */
 .chart-container {
     width: 100%;
-    height: 400px;
-    min-height: 400px;
-    overflow: hidden;
+    height: clamp(280px, 30vw, 450px);
+    min-height: 0;
 }
 
 .chart-container.large {
-    height: 500px;
+    height: clamp(350px, 35vw, 550px);
 }
 
-/* Tables */
+/* Tables — fully fluid, no fixed max-height */
 .table-wrapper {
     overflow-x: auto;
-    overflow-y: auto;
-    max-height: 480px;
+    -webkit-overflow-scrolling: touch;
 }
 
 table {
@@ -205,17 +204,18 @@ thead {
 }
 
 th {
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     text-align: left;
     font-weight: 600;
     font-size: 0.875rem;
     color: var(--gray-text);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    white-space: nowrap;
 }
 
 td {
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--gray-border);
 }
 
@@ -226,6 +226,7 @@ tr:hover {
 .amount {
     font-weight: 600;
     font-family: 'SF Mono', 'Monaco', monospace;
+    white-space: nowrap;
 }
 
 .amount.negative {
@@ -234,6 +235,25 @@ tr:hover {
 
 .amount.positive {
     color: var(--green);
+}
+
+/* Container query: compact table in narrow cards */
+@container (max-width: 400px) {
+    th, td {
+        padding: 0.5rem 0.625rem;
+        font-size: 0.8125rem;
+    }
+
+    .card-title {
+        font-size: 1rem;
+    }
+}
+
+@container (max-width: 300px) {
+    th, td {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.75rem;
+    }
 }
 
 /* Badges */
@@ -283,7 +303,7 @@ tr:hover {
 
 .filters input[type="search"] {
     flex: 1;
-    min-width: 300px;
+    min-width: 200px;
 }
 
 .filters select {
@@ -344,7 +364,7 @@ button, .btn {
     cursor: not-allowed;
 }
 
-/* Grid Layouts */
+/* Grid Layouts — fluid with minmax */
 .grid {
     display: grid;
     gap: 1.5rem;
@@ -355,23 +375,11 @@ button, .btn {
 }
 
 .grid-2 {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr));
 }
 
 .grid-3 {
-    grid-template-columns: repeat(3, 1fr);
-}
-
-@media (max-width: 1200px) {
-    .summary-card .value {
-        font-size: 1.5rem;
-    }
-}
-
-@media (max-width: 1024px) {
-    .grid-2, .grid-3 {
-        grid-template-columns: 1fr;
-    }
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
 }
 
 /* Loading */
@@ -393,27 +401,72 @@ button, .btn {
     background: var(--gray-bg);
 }
 
-/* Responsive */
+/* Responsive — progressive breakpoints */
+@media (max-width: 1200px) {
+    .summary-card .value {
+        font-size: 1.5rem;
+    }
+
+    .main-content {
+        padding: 2rem;
+    }
+}
+
 @media (max-width: 768px) {
     .sidebar {
         width: 200px;
     }
-    
+
     .main-content {
         margin-left: 200px;
         padding: 1.5rem;
     }
-    
+
     .summary-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
     }
-    
+
     .filters {
         flex-direction: column;
     }
-    
+
     .filters input,
     .filters select {
         width: 100%;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 600px) {
+    .sidebar {
+        width: 60px;
+    }
+
+    .sidebar-header h1,
+    .sidebar-header p,
+    .sidebar-nav a span {
+        display: none;
+    }
+
+    .sidebar-nav a {
+        justify-content: center;
+        padding: 0.875rem 0;
+    }
+
+    .sidebar-nav a .icon {
+        margin-right: 0;
+    }
+
+    .main-content {
+        margin-left: 60px;
+        padding: 1rem;
+    }
+
+    .summary-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .summary-card .value {
+        font-size: 1.25rem;
     }
 }
