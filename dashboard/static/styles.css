@@ -190,6 +190,8 @@ body {
 /* Tables */
 .table-wrapper {
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 480px;
 }
 
 table {
