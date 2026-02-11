@@ -41,14 +41,29 @@ function createDonutChart(elementId, data, title) {
         },
         series: [{
             type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
+            radius: ['40%', '65%'],
+            center: ['50%', '55%'],
+            avoidLabelOverlap: true,
             itemStyle: {
                 borderRadius: 8,
                 borderColor: '#fff',
                 borderWidth: 2
             },
-            label: { show: false },
+            label: {
+                show: true,
+                position: 'outside',
+                formatter: '{b}: {d}%',
+                fontSize: 11,
+                overflow: 'truncate',
+                ellipsis: '...',
+                width: 80
+            },
+            labelLine: {
+                show: true,
+                length: 15,
+                length2: 10,
+                smooth: true
+            },
             emphasis: {
                 label: {
                     show: true,
