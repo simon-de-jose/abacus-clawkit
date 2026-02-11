@@ -1,5 +1,20 @@
 // Chart helper functions using ECharts
 
+/**
+ * Observe the chart container for size changes and auto-resize the ECharts instance.
+ * Uses ResizeObserver so charts respond to CSS grid/flex reflows, not just window resize.
+ */
+function observeChartResize(chart, elementId) {
+    const container = document.getElementById(elementId);
+    if (!container) return;
+    const ro = new ResizeObserver(() => {
+        chart.resize();
+    });
+    ro.observe(container);
+    // Also handle dispose to avoid leaks
+    chart.on('disposed', () => ro.disconnect());
+}
+
 const CHART_COLORS = [
     '#E94560', '#4285F4', '#0F9D58', '#F4B400', '#9C27B0',
     '#FF6F00', '#00BCD4', '#8BC34A', '#FF5722', '#673AB7'
@@ -50,7 +65,7 @@ function createDonutChart(elementId, data, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
 
@@ -97,7 +112,7 @@ function createBarChart(elementId, categories, data, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
 
@@ -142,7 +157,7 @@ function createStackedBarChart(elementId, categories, series, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
 
@@ -187,7 +202,7 @@ function createLineChart(elementId, categories, series, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
 
@@ -231,7 +246,7 @@ function createSankeyChart(elementId, nodes, links, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
 
@@ -277,7 +292,7 @@ function createHorizontalBarChart(elementId, categories, data, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
 
@@ -326,6 +341,6 @@ function createStackedAreaChart(elementId, categories, series, title) {
     };
     
     chart.setOption(option);
-    window.addEventListener('resize', () => chart.resize());
+    observeChartResize(chart, elementId);
     return chart;
 }
