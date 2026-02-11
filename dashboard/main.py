@@ -63,6 +63,16 @@ async def read_reports():
     return FileResponse("static/reports.html")
 
 
+@app.get("/reports/cashflow")
+async def read_reports_cashflow():
+    return FileResponse("static/reports.html")
+
+
+@app.get("/reports/spending")
+async def read_reports_spending():
+    return FileResponse("static/reports.html")
+
+
 @app.get("/accounts")
 async def read_accounts():
     return FileResponse("static/accounts.html")
@@ -698,6 +708,294 @@ async def get_categories():
         return JSONResponse({"categories": categories})
     except Exception as e:
         print(f"Error in /api/categories: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/reports/cashflow-sankey")
+async def get_cashflow_sankey_report(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    """Get enhanced Sankey data for Cash Flow report with summary stats"""
+    try:
+        conn = get_db()
+        
+        # Default to current month
+        if not date_from or not date_to:
+            conn_temp = get_db()
+            latest = conn_temp.execute("SELECT MAX(transaction_date) FROM transactions").fetchone()
+            conn_temp.close()
+            if latest and latest[0]:
+                ld = latest[0]
+                date_from = date(ld.year, ld.month, 1)
+                _, last_day = monthrange(ld.year, ld.month)
+                date_to = date(ld.year, ld.month, last_day)
+            else:
+                today = date.today()
+                date_from = date(today.year, today.month, 1)
+                _, last_day = monthrange(today.year, today.month)
+                date_to = date(today.year, today.month, last_day)
+        
+        # Get income by category (income sources)
+        income_data = conn.execute("""
+            SELECT COALESCE(category, 'Other Income'), SUM(amount) as total
+            FROM transactions 
+            WHERE amount > 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+            GROUP BY category
+        """, (date_from, date_to)).fetchall()
+        
+        # Get expenses by category group and category
+        expenses_data = conn.execute("""
+            SELECT 
+                COALESCE(category_group, 'Uncategorized') as grp,
+                COALESCE(category, 'Other') as cat,
+                SUM(ABS(amount)) as total
+            FROM transactions 
+            WHERE amount < 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+            GROUP BY grp, cat
+        """, (date_from, date_to)).fetchall()
+        
+        # Summary stats
+        total_income_result = conn.execute("""
+            SELECT SUM(amount) FROM transactions 
+            WHERE amount > 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+        """, (date_from, date_to)).fetchone()
+        total_income = float(total_income_result[0]) if total_income_result[0] else 0.0
+        
+        total_expenses_result = conn.execute("""
+            SELECT SUM(ABS(amount)) FROM transactions 
+            WHERE amount < 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+        """, (date_from, date_to)).fetchone()
+        total_expenses = float(total_expenses_result[0]) if total_expenses_result[0] else 0.0
+        
+        conn.close()
+        
+        # Build Sankey nodes and links
+        # Flow: Income sources → "Income" → Category Groups → Categories
+        nodes = []
+        links = []
+        node_set = set()
+        
+        def add_node(name):
+            if name not in node_set:
+                node_set.add(name)
+                nodes.append({"name": name})
+        
+        # Add "Income" aggregate node
+        add_node("Income")
+        
+        # Income sources → Income
+        for row in income_data:
+            source = row[0]
+            amount = float(row[1])
+            add_node(source)
+            links.append({
+                "source": source,
+                "target": "Income",
+                "value": round(amount, 2)
+            })
+        
+        # Aggregate expenses by group
+        group_totals = {}
+        for row in expenses_data:
+            group = row[0]
+            amount = float(row[2])
+            group_totals[group] = group_totals.get(group, 0) + amount
+        
+        # Income → Category Groups
+        for group, total in sorted(group_totals.items(), key=lambda x: -x[1]):
+            add_node(group)
+            links.append({
+                "source": "Income",
+                "target": group,
+                "value": round(total, 2)
+            })
+        
+        # Category Groups → Categories
+        for row in expenses_data:
+            group = row[0]
+            category = row[1]
+            amount = float(row[2])
+            
+            # Avoid self-links
+            display_cat = category if category != group else f"{category} (items)"
+            add_node(display_cat)
+            links.append({
+                "source": group,
+                "target": display_cat,
+                "value": round(amount, 2)
+            })
+        
+        net_income = total_income - total_expenses
+        savings_rate = (net_income / total_income * 100) if total_income > 0 else 0
+        
+        return JSONResponse({
+            "nodes": nodes,
+            "links": links,
+            "summary": {
+                "total_income": round(total_income, 2),
+                "total_expenses": round(total_expenses, 2),
+                "net_income": round(net_income, 2),
+                "savings_rate": round(savings_rate, 1)
+            }
+        })
+    except Exception as e:
+        print(f"Error in /api/reports/cashflow-sankey: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/reports/spending-summary")
+async def get_spending_summary(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
+):
+    """Get spending summary stats for the Spending tab"""
+    try:
+        conn = get_db()
+        
+        # Default to current month
+        if not date_from or not date_to:
+            conn_temp = get_db()
+            latest = conn_temp.execute("SELECT MAX(transaction_date) FROM transactions").fetchone()
+            conn_temp.close()
+            if latest and latest[0]:
+                ld = latest[0]
+                date_from = date(ld.year, ld.month, 1)
+                _, last_day = monthrange(ld.year, ld.month)
+                date_to = date(ld.year, ld.month, last_day)
+            else:
+                today = date.today()
+                date_from = date(today.year, today.month, 1)
+                _, last_day = monthrange(today.year, today.month)
+                date_to = date(today.year, today.month, last_day)
+        
+        # Total transactions (expenses only)
+        count_result = conn.execute("""
+            SELECT COUNT(*) FROM transactions 
+            WHERE amount < 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+        """, (date_from, date_to)).fetchone()
+        total_transactions = int(count_result[0])
+        
+        # Largest transaction
+        largest_result = conn.execute("""
+            SELECT merchant, ABS(amount) as amt
+            FROM transactions 
+            WHERE amount < 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+            ORDER BY amt DESC
+            LIMIT 1
+        """, (date_from, date_to)).fetchone()
+        largest_merchant = largest_result[0] if largest_result else "—"
+        largest_amount = float(largest_result[1]) if largest_result else 0.0
+        
+        # Average transaction
+        avg_result = conn.execute("""
+            SELECT AVG(ABS(amount)) FROM transactions 
+            WHERE amount < 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+        """, (date_from, date_to)).fetchone()
+        average_transaction = float(avg_result[0]) if avg_result and avg_result[0] else 0.0
+        
+        # Total spending
+        total_result = conn.execute("""
+            SELECT SUM(ABS(amount)) FROM transactions 
+            WHERE amount < 0 
+            AND transaction_date >= ? AND transaction_date <= ?
+        """, (date_from, date_to)).fetchone()
+        total_spending = float(total_result[0]) if total_result and total_result[0] else 0.0
+        
+        conn.close()
+        
+        return JSONResponse({
+            "total_transactions": total_transactions,
+            "largest_merchant": largest_merchant,
+            "largest_amount": round(largest_amount, 2),
+            "average_transaction": round(average_transaction, 2),
+            "total_spending": round(total_spending, 2)
+        })
+    except Exception as e:
+        print(f"Error in /api/reports/spending-summary: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/transactions/export")
+async def export_transactions(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    category: Optional[str] = None
+):
+    """Export transactions as CSV"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        
+        conn = get_db()
+        
+        # Build WHERE clauses
+        where_clauses = []
+        params = []
+        
+        if date_from:
+            where_clauses.append("transaction_date >= ?")
+            params.append(date_from)
+        
+        if date_to:
+            where_clauses.append("transaction_date <= ?")
+            params.append(date_to)
+        
+        if category:
+            where_clauses.append("category = ?")
+            params.append(category)
+        
+        # Default to expenses only
+        where_clauses.append("amount < 0")
+        
+        where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+        
+        transactions = conn.execute(f"""
+            SELECT 
+                transaction_date, merchant, description, category, 
+                category_group, ABS(amount) as amount, account_id
+            FROM transactions 
+            {where_sql}
+            ORDER BY transaction_date DESC
+        """, params).fetchall()
+        
+        conn.close()
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Date', 'Merchant', 'Description', 'Category', 'Category Group', 'Amount', 'Account'])
+        
+        for row in transactions:
+            writer.writerow([
+                str(row[0]),
+                row[1] or '',
+                row[2] or '',
+                row[3] or '',
+                row[4] or '',
+                f"{row[5]:.2f}",
+                row[6] or ''
+            ])
+        
+        output.seek(0)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename=transactions_{date_from or 'all'}_{date_to or 'all'}.csv"
+            }
+        )
+    except Exception as e:
+        print(f"Error in /api/transactions/export: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

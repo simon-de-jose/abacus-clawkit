@@ -351,3 +351,61 @@ function createStackedAreaChart(elementId, categories, series, title) {
     observeChartResize(chart, elementId);
     return chart;
 }
+
+function createDonutWithCenterLabel(elementId, data, centerLabel, title) {
+    const chart = echarts.init(document.getElementById(elementId));
+    
+    const option = {
+        title: {
+            text: title,
+            left: 'center',
+            top: 10,
+            textStyle: { fontSize: 16, fontWeight: 600, color: '#1A1A2E' }
+        },
+        tooltip: {
+            trigger: 'item',
+            formatter: '{b}: ${c} ({d}%)'
+        },
+        graphic: {
+            type: 'text',
+            left: 'center',
+            top: 'center',
+            style: {
+                text: centerLabel,
+                textAlign: 'center',
+                fill: '#1A1A2E',
+                fontSize: 24,
+                fontWeight: 700
+            }
+        },
+        series: [{
+            type: 'pie',
+            radius: ['45%', '70%'],
+            center: ['50%', '55%'],
+            avoidLabelOverlap: false,
+            itemStyle: {
+                borderRadius: 8,
+                borderColor: '#fff',
+                borderWidth: 2
+            },
+            label: { show: false },
+            labelLine: { show: false },
+            emphasis: {
+                label: {
+                    show: true,
+                    fontSize: 14,
+                    fontWeight: 'bold'
+                }
+            },
+            data: data.map((item, i) => ({
+                name: item.name,
+                value: item.value,
+                itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] }
+            }))
+        }]
+    };
+    
+    chart.setOption(option);
+    observeChartResize(chart, elementId);
+    return chart;
+}

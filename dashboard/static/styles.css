@@ -470,3 +470,423 @@ button, .btn {
         font-size: 1.25rem;
     }
 }
+
+/* Reports Page - Monarch-style Sub-tabs */
+.reports-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.reports-header h2 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--navy);
+}
+
+.sub-tabs {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--gray-border);
+}
+
+.sub-tab {
+    padding: 0.75rem 1.5rem;
+    color: var(--gray-text);
+    text-decoration: none;
+    font-weight: 600;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    transition: all 0.2s;
+}
+
+.sub-tab:hover {
+    color: var(--navy);
+}
+
+.sub-tab.active {
+    color: var(--coral);
+    border-bottom-color: var(--coral);
+}
+
+.header-controls {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.date-picker {
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--gray-border);
+    border-radius: 8px;
+    background: var(--white);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 500;
+    transition: border-color 0.2s;
+    position: relative;
+}
+
+.date-picker:hover {
+    border-color: var(--coral);
+}
+
+.date-picker-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: var(--white);
+    border: 1px solid var(--gray-border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-hover);
+    min-width: 180px;
+    z-index: 100;
+    display: none;
+}
+
+.date-picker-dropdown.active {
+    display: block;
+}
+
+.date-picker-option {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.875rem;
+}
+
+.date-picker-option:hover {
+    background: var(--gray-bg);
+}
+
+.date-picker-option.active {
+    background: var(--gray-bg);
+    color: var(--coral);
+    font-weight: 600;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Sankey Controls */
+.sankey-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--gray-border);
+}
+
+.sankey-controls .section-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--gray-text);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.sankey-controls .date-range {
+    font-size: 0.875rem;
+    color: var(--gray-text);
+}
+
+/* Spending Chart Section */
+.spending-chart-section {
+    margin-bottom: 1.5rem;
+}
+
+.spending-chart-layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+.donut-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.category-legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 0.75rem;
+}
+
+.category-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: background 0.2s;
+}
+
+.category-legend-item:hover {
+    background: var(--gray-bg);
+}
+
+.category-color-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.category-legend-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.category-legend-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--navy);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.category-legend-amount {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--coral);
+    font-family: 'SF Mono', 'Monaco', monospace;
+}
+
+.category-legend-percent {
+    font-size: 0.75rem;
+    color: var(--gray-text);
+    margin-left: 0.25rem;
+}
+
+/* Spending Bottom Section */
+.spending-bottom {
+    display: grid;
+    grid-template-columns: 1fr 300px;
+    gap: 1.5rem;
+}
+
+/* Transactions Grouped by Date */
+.transactions-grouped {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+.transactions-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--gray-border);
+}
+
+.transactions-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+.daily-group {
+    margin-bottom: 1.5rem;
+}
+
+.daily-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 2px solid var(--gray-border);
+    margin-bottom: 0.5rem;
+}
+
+.daily-date {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--navy);
+}
+
+.daily-total {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: var(--coral);
+    font-family: 'SF Mono', 'Monaco', monospace;
+}
+
+.transaction-row {
+    display: grid;
+    grid-template-columns: 40px 1fr auto auto auto;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--gray-border);
+    transition: background 0.2s;
+}
+
+.transaction-row:hover {
+    background: var(--gray-bg);
+    margin: 0 -0.5rem;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    border-radius: 6px;
+}
+
+.transaction-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--gray-bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.transaction-details {
+    min-width: 0;
+}
+
+.transaction-merchant {
+    font-weight: 500;
+    color: var(--navy);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.transaction-category-badge {
+    display: inline-block;
+    margin-top: 0.25rem;
+}
+
+.transaction-account-badge {
+    display: inline-block;
+    margin-left: 0.5rem;
+}
+
+.transaction-amount {
+    font-weight: 600;
+    font-family: 'SF Mono', 'Monaco', monospace;
+    color: var(--coral);
+    white-space: nowrap;
+}
+
+/* Summary Sidebar */
+.summary-sidebar {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    height: fit-content;
+    position: sticky;
+    top: 2rem;
+}
+
+.summary-sidebar h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 1rem;
+}
+
+.summary-stat {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--gray-border);
+}
+
+.summary-stat:last-of-type {
+    border-bottom: none;
+}
+
+.summary-stat-label {
+    font-size: 0.875rem;
+    color: var(--gray-text);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.summary-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--navy);
+    font-family: 'SF Mono', 'Monaco', monospace;
+}
+
+.summary-stat-value.negative {
+    color: var(--coral);
+}
+
+.summary-stat-detail {
+    font-size: 0.875rem;
+    color: var(--gray-text);
+    margin-top: 0.25rem;
+}
+
+.download-csv-btn {
+    width: 100%;
+    padding: 0.875rem;
+    background: var(--coral);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-top: 1rem;
+}
+
+.download-csv-btn:hover {
+    background: #D63850;
+    box-shadow: var(--shadow);
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .spending-chart-layout {
+        grid-template-columns: 1fr;
+    }
+    
+    .spending-bottom {
+        grid-template-columns: 1fr;
+    }
+    
+    .summary-sidebar {
+        position: static;
+    }
+}
+
+@media (max-width: 768px) {
+    .reports-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .sub-tabs {
+        width: 100%;
+    }
+    
+    .transaction-row {
+        grid-template-columns: 1fr auto;
+        gap: 0.5rem;
+    }
+    
+    .transaction-icon {
+        display: none;
+    }
+}
