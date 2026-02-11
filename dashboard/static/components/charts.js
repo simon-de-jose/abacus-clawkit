@@ -33,22 +33,29 @@ function createDonutChart(elementId, data, title) {
             trigger: 'item',
             formatter: '{b}: ${c} ({d}%)'
         },
+        grid: {
+            bottom: 50
+        },
         legend: {
-            orient: 'vertical',
-            right: 10,
-            top: 'center',
-            textStyle: { fontSize: 12 }
+            orient: 'horizontal',
+            bottom: 5,
+            left: 'center',
+            padding: [5, 20],
+            textStyle: { fontSize: 11 },
+            itemGap: 15
         },
         series: [{
             type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
+            radius: ['35%', '65%'],
+            center: ['50%', '46%'],
+            avoidLabelOverlap: true,
             itemStyle: {
                 borderRadius: 8,
                 borderColor: '#fff',
                 borderWidth: 2
             },
             label: { show: false },
+            labelLine: { show: false },
             emphasis: {
                 label: {
                     show: true,
