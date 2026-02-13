@@ -785,6 +785,10 @@ button, .btn {
     white-space: nowrap;
 }
 
+.transaction-amount.positive {
+    color: var(--green);
+}
+
 /* Summary Sidebar */
 .summary-sidebar {
     background: var(--white);
