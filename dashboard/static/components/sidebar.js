@@ -4,8 +4,10 @@ function createSidebar(activePage) {
     const pages = [
         { name: 'Dashboard', path: '/', icon: '📊' },
         { name: 'Transactions', path: '/transactions', icon: '💳' },
+        { name: 'Review', path: '/review', icon: '📋' },
         { name: 'Cash Flow', path: '/cashflow', icon: '💰' },
         { name: 'Reports', path: '/reports/cashflow', icon: '📈' },
+        { name: 'Categories', path: '/categories', icon: '🏷️' },
         { name: 'Accounts', path: '/accounts', icon: '🏦' }
     ];
     

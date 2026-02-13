@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Categories — Abacus</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <style>
+        .category-group-section {
+            background: var(--white);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .group-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--gray-border);
+        }
+
+        .group-icon {
+            font-size: 2rem;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .group-icon:hover {
+            transform: scale(1.1);
+        }
+
+        .group-name {
+            flex: 1;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .group-name:hover {
+            background: var(--gray-bg);
+        }
+
+        .group-color-bar {
+            width: 60px;
+            height: 6px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .btn-edit-group {
+            padding: 0.5rem 1rem;
+            border: 1px solid var(--gray-border);
+            border-radius: 8px;
+            background: var(--white);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-edit-group:hover {
+            background: var(--gray-bg);
+        }
+
+        .category-list {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .category-row {
+            display: grid;
+            grid-template-columns: 2.5rem 1fr auto auto auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 0.75rem;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+
+        .category-row:hover {
+            background: var(--gray-bg);
+        }
+
+        .category-row-icon {
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .category-row-name {
+            font-weight: 500;
+            color: var(--navy);
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .category-row-name:hover {
+            background: var(--white);
+        }
+
+        .category-stats {
+            font-size: 0.875rem;
+            color: var(--gray-text);
+        }
+
+        .category-color-dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .category-color-dot:hover {
+            transform: scale(1.2);
+        }
+
+        .btn-toggle-hidden {
+            padding: 0.375rem 0.75rem;
+            border: 1px solid var(--gray-border);
+            border-radius: 6px;
+            background: var(--white);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-toggle-hidden:hover {
+            background: var(--gray-bg);
+        }
+
+        .btn-toggle-hidden.hidden {
+            opacity: 0.5;
+        }
+
+        .add-category-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            border: 2px dashed var(--gray-border);
+            border-radius: 8px;
+            background: transparent;
+            color: var(--gray-text);
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            margin-top: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .add-category-btn:hover {
+            border-color: var(--coral);
+            color: var(--coral);
+            background: rgba(233, 69, 96, 0.05);
+        }
+
+        .add-group-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            border: 2px dashed var(--gray-border);
+            border-radius: 12px;
+            background: transparent;
+            color: var(--gray-text);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: all 0.2s;
+            width: 100%;
+        }
+
+        .add-group-btn:hover {
+            border-color: var(--coral);
+            color: var(--coral);
+            background: rgba(233, 69, 96, 0.05);
+        }
+
+        /* Simple emoji picker */
+        .emoji-picker {
+            display: none;
+            position: fixed;
+            background: var(--white);
+            border: 1px solid var(--gray-border);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: var(--shadow-hover);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .emoji-picker.active {
+            display: block;
+        }
+
+        .emoji-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 0.5rem;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .emoji-option {
+            font-size: 1.5rem;
+            padding: 0.5rem;
+            cursor: pointer;
+            border-radius: 6px;
+            text-align: center;
+            transition: background 0.2s;
+        }
+
+        .emoji-option:hover {
+            background: var(--gray-bg);
+        }
+
+        /* Color picker */
+        .color-picker {
+            display: none;
+            position: fixed;
+            background: var(--white);
+            border: 1px solid var(--gray-border);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: var(--shadow-hover);
+            z-index: 1000;
+        }
+
+        .color-picker.active {
+            display: block;
+        }
+
+        .color-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.5rem;
+        }
+
+        .color-option {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .color-option:hover {
+            border-color: var(--navy);
+            transform: scale(1.1);
+        }
+
+        .loading {
+            text-align: center;
+            padding: 3rem;
+            color: var(--gray-text);
+        }
+    </style>
+</head>
+<body data-page="Categories">
+    <div class="main-content">
+        <div class="page-header">
+            <h2>🏷️ Category Management</h2>
+            <p>Manage your category groups and subcategories</p>
+        </div>
+
+        <div id="categories-container">
+            <div class="loading">Loading categories...</div>
+        </div>
+
+        <button class="add-group-btn" id="add-group-btn">
+            ➕ Add Category Group
+        </button>
+    </div>
+
+    <!-- Emoji Picker -->
+    <div class="emoji-picker" id="emoji-picker">
+        <div class="emoji-grid">
+            <!-- Common emojis -->
+            ${['🍽️', '🛒', '🍴', '☕', '🏠', '⚡', '🚗', '⛽', '🛍️', '👕', '💻', '❤️', '🏥', '💊', '🎬', '📺', '📱', '🌐', '✈️', '🏨', '🐱', '🐾', '👤', '✂️', '💰', '💵', '⇄'].map(e => `<div class="emoji-option">${e}</div>`).join('')}
+        </div>
+    </div>
+
+    <!-- Color Picker -->
+    <div class="color-picker" id="color-picker">
+        <div class="color-grid">
+            ${['#FF6B6B', '#4ECDC4', '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3', '#FFD93D', '#6BCF7F', '#C7CEEA', '#FFEAA7', '#81C784', '#90A4AE', '#E94560', '#0F9D58', '#4285F4', '#F57C00'].map(c => `<div class="color-option" style="background: ${c};" data-color="${c}"></div>`).join('')}
+        </div>
+    </div>
+
+    <script src="/static/components/sidebar.js"></script>
+    <script src="/static/components/table.js"></script>
+    <script>
+        let categories = [];
+        let currentEditTarget = null;
+        let currentEditType = null; // 'emoji' or 'color'
+
+        async function loadCategories() {
+            try {
+                const res = await fetch('/api/categories/all');
+                const data = await res.json();
+                categories = data.groups;
+                renderCategories();
+            } catch (err) {
+                console.error('Failed to load categories:', err);
+            }
+        }
+
+        function renderCategories() {
+            const container = document.getElementById('categories-container');
+            
+            container.innerHTML = categories.map(group => `
+                <div class="category-group-section" data-group-id="${group.id}">
+                    <div class="group-header">
+                        <div class="group-icon" data-group-id="${group.id}" data-type="icon">${group.icon}</div>
+                        <div class="group-name" data-group-id="${group.id}" data-type="name">${group.name}</div>
+                        <div class="group-color-bar" style="background: ${group.color};" data-group-id="${group.id}" data-type="color"></div>
+                    </div>
+                    <div class="category-list">
+                        ${group.categories.map(cat => `
+                            <div class="category-row ${cat.hidden ? 'hidden' : ''}" data-category-id="${cat.id}">
+                                <div class="category-row-icon" data-category-id="${cat.id}" data-type="icon">${cat.icon}</div>
+                                <div class="category-row-name" data-category-id="${cat.id}" data-type="name">${cat.name}</div>
+                                <div class="category-stats">${cat.usage_count} txns</div>
+                                <div class="category-color-dot" style="background: ${cat.color};" data-category-id="${cat.id}" data-type="color"></div>
+                                <button class="btn-toggle-hidden ${cat.hidden ? 'hidden' : ''}" data-category-id="${cat.id}">
+                                    ${cat.hidden ? 'Show' : 'Hide'}
+                                </button>
+                            </div>
+                        `).join('')}
+                        <button class="add-category-btn" data-group-id="${group.id}">
+                            ＋ Add subcategory
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            attachEventListeners();
+        }
+
+        function attachEventListeners() {
+            // Group icon clicks
+            document.querySelectorAll('.group-icon').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    currentEditTarget = { type: 'group', id: e.target.dataset.groupId, field: 'icon' };
+                    showEmojiPicker(e.target);
+                });
+            });
+
+            // Group name clicks (inline edit)
+            document.querySelectorAll('.group-name').forEach(el => {
+                el.addEventListener('click', async (e) => {
+                    const groupId = e.target.dataset.groupId;
+                    const currentName = e.target.textContent;
+                    const newName = prompt('Edit group name:', currentName);
+                    
+                    if (newName && newName !== currentName) {
+                        await updateCategoryGroup(groupId, { name: newName });
+                    }
+                });
+            });
+
+            // Group color bar clicks
+            document.querySelectorAll('.group-color-bar').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    currentEditTarget = { type: 'group', id: e.target.dataset.groupId, field: 'color' };
+                    showColorPicker(e.target);
+                });
+            });
+
+            // Category icon clicks
+            document.querySelectorAll('.category-row-icon').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    currentEditTarget = { type: 'category', id: e.target.dataset.categoryId, field: 'icon' };
+                    showEmojiPicker(e.target);
+                });
+            });
+
+            // Category name clicks (inline edit)
+            document.querySelectorAll('.category-row-name').forEach(el => {
+                el.addEventListener('click', async (e) => {
+                    const categoryId = e.target.dataset.categoryId;
+                    const currentName = e.target.textContent;
+                    const newName = prompt('Edit category name:', currentName);
+                    
+                    if (newName && newName !== currentName) {
+                        await updateCategory(categoryId, { name: newName });
+                    }
+                });
+            });
+
+            // Category color dot clicks
+            document.querySelectorAll('.category-color-dot').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    currentEditTarget = { type: 'category', id: e.target.dataset.categoryId, field: 'color' };
+                    showColorPicker(e.target);
+                });
+            });
+
+            // Hide/Show toggle buttons
+            document.querySelectorAll('.btn-toggle-hidden').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const categoryId = e.target.dataset.categoryId;
+                    const isHidden = e.target.classList.contains('hidden');
+                    await updateCategory(categoryId, { hidden: !isHidden });
+                });
+            });
+
+            // Add category buttons
+            document.querySelectorAll('.add-category-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const groupId = e.target.dataset.groupId;
+                    const name = prompt('New category name:');
+                    
+                    if (name) {
+                        await createCategory(name, groupId);
+                    }
+                });
+            });
+        }
+
+        function showEmojiPicker(target) {
+            const picker = document.getElementById('emoji-picker');
+            const rect = target.getBoundingClientRect();
+            
+            picker.style.left = `${rect.left}px`;
+            picker.style.top = `${rect.bottom + 10}px`;
+            picker.classList.add('active');
+            
+            // Attach emoji selection handlers
+            picker.querySelectorAll('.emoji-option').forEach(opt => {
+                opt.onclick = async () => {
+                    const emoji = opt.textContent;
+                    if (currentEditTarget.type === 'group') {
+                        await updateCategoryGroup(currentEditTarget.id, { icon: emoji });
+                    } else {
+                        await updateCategory(currentEditTarget.id, { icon: emoji });
+                    }
+                    picker.classList.remove('active');
+                };
+            });
+        }
+
+        function showColorPicker(target) {
+            const picker = document.getElementById('color-picker');
+            const rect = target.getBoundingClientRect();
+            
+            picker.style.left = `${rect.left}px`;
+            picker.style.top = `${rect.bottom + 10}px`;
+            picker.classList.add('active');
+            
+            // Attach color selection handlers
+            picker.querySelectorAll('.color-option').forEach(opt => {
+                opt.onclick = async () => {
+                    const color = opt.dataset.color;
+                    if (currentEditTarget.type === 'group') {
+                        await updateCategoryGroup(currentEditTarget.id, { color });
+                    } else {
+                        await updateCategory(currentEditTarget.id, { color });
+                    }
+                    picker.classList.remove('active');
+                };
+            });
+        }
+
+        async function updateCategory(categoryId, updates) {
+            try {
+                const res = await fetch(\`/api/categories/\${categoryId}\`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                
+                if (res.ok) {
+                    await loadCategories();
+                }
+            } catch (err) {
+                console.error('Failed to update category:', err);
+            }
+        }
+
+        async function updateCategoryGroup(groupId, updates) {
+            try {
+                const res = await fetch(\`/api/category-groups/\${groupId}\`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updates)
+                });
+                
+                if (res.ok) {
+                    await loadCategories();
+                }
+            } catch (err) {
+                console.error('Failed to update category group:', err);
+            }
+        }
+
+        async function createCategory(name, groupId) {
+            try {
+                const res = await fetch('/api/categories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, group_id: groupId, icon: '📦', color: '#6B7280' })
+                });
+                
+                if (res.ok) {
+                    await loadCategories();
+                }
+            } catch (err) {
+                console.error('Failed to create category:', err);
+            }
+        }
+
+        // Add group button handler
+        document.getElementById('add-group-btn').addEventListener('click', async () => {
+            const name = prompt('New group name:');
+            
+            if (name) {
+                try {
+                    const res = await fetch('/api/category-groups', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, icon: '📂', color: '#6B7280' })
+                    });
+                    
+                    if (res.ok) {
+                        await loadCategories();
+                    }
+                } catch (err) {
+                    console.error('Failed to create group:', err);
+                }
+            }
+        });
+
+        // Close pickers on outside click
+        document.addEventListener('click', (e) => {
+            const emojiPicker = document.getElementById('emoji-picker');
+            const colorPicker = document.getElementById('color-picker');
+            
+            if (!emojiPicker.contains(e.target) && !e.target.closest('[data-type="icon"]')) {
+                emojiPicker.classList.remove('active');
+            }
+            
+            if (!colorPicker.contains(e.target) && !e.target.closest('[data-type="color"]')) {
+                colorPicker.classList.remove('active');
+            }
+        });
+
+        // Initialize
+        loadCategories();
+    </script>
+</body>
+</html>
