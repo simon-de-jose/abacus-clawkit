@@ -128,6 +128,10 @@
             flex-shrink: 0;
         }
 
+        .transaction-amount.positive {
+            color: var(--green);
+        }
+
         .transaction-details {
             font-size: 0.875rem;
             color: var(--gray-text);
@@ -556,7 +560,7 @@
                         <div class="transaction-main">
                             <div class="transaction-header">
                                 <div class="transaction-merchant">${merchant}</div>
-                                <div class="transaction-amount">$${Math.abs(txn.amount).toFixed(2)}</div>
+                                <div class="transaction-amount ${txn.amount >= 0 ? 'positive' : ''}">$${Math.abs(txn.amount).toFixed(2)}</div>
                             </div>
                             <div class="transaction-details">
                                 ${formatDate(txn.transaction_date)} • ${txn.account_id || 'Unknown account'}

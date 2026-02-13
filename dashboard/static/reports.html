@@ -379,7 +379,7 @@
                                             ${txn.category ? `<span class="badge category transaction-category-badge">${txn.category}</span>` : ''}
                                         </div>
                                     </div>
-                                    <div class="transaction-amount">${formatCurrency(txn.amount)}</div>
+                                    <div class="transaction-amount ${txn.amount >= 0 ? 'positive' : ''}">${formatCurrency(txn.amount)}</div>
                                 </div>
                             `;
                         });
