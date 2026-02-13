@@ -61,8 +61,8 @@ BRISTOL FARMS,Bristol Farms,Groceries,Food & Drink
 BUIL SAMGYE TANG,Buil Samgye Tang,Dining Out,Food & Drink
 BUNA CAFE,Buna Cafe,Coffee & Drinks,Food & Drink
 Bamboo Insurance,Bamboo Insurance,Insurance,Bills & Subscriptions
-CA DMV FEE,CA DMV Fee,Transfer,Transfer
-CA DMV KM6,CA DMV,Transfer,Transfer
+CA DMV FEE,CA DMV Fee,Government,Auto
+CA DMV KM6,CA DMV,Government,Auto
 CAFE LA MANCHURIA,Cafe La Manchuria,Coffee & Drinks,Food & Drink
 CAFE QUINDIO,Cafe Quindio,Coffee & Drinks,Food & Drink
 CAFE YOYO,Cafe Yoyo,Coffee & Drinks,Food & Drink
@@ -419,7 +419,7 @@ SQ *TIGRES FUEGO,Tigres Fuego,Dining Out,Food & Drink
 SQ *VILLAS TACOS,Villas Tacos,Dining Out,Food & Drink
 SQ *WHITE SPARROW,White Sparrow Coffee,Coffee & Drinks,Food & Drink
 SQ *WOODCAT COFFEE,Woodcat Coffee,Coffee & Drinks,Food & Drink
-ST OF CA DMV,CA DMV,Transfer,Transfer
+ST OF CA DMV,CA DMV,Government,Auto
 STANDARD,Standard Hotel,Hotels,Travel
 STATION AVIA,Station Avia Gas,Gas,Transportation
 STEREOSCOPE COFFEE,Stereoscope Coffee,Coffee & Drinks,Food & Drink
@@ -447,7 +447,7 @@ TLS USA,TLScontact,Visa Services,Travel
 TM *GABRIEL IGLESIAS,Gabriel Iglesias Show,Entertainment,Entertainment
 TM *NATALIA LAFOURCADE,Natalia Lafourcade Concert,Concerts,Entertainment
 TMB BUS,TMB Barcelona Transit,Public Transit,Transportation
-TMMC CENTRALIZED,Toyota Medical Center,Healthcare,Health
+TMMC CENTRALIZED,Torrance Memorial Medical Center,Healthcare,Health
 TMMC POLAK,Polak Imaging,Healthcare,Health
 TOFU GARDENA,Tofu Gardena,Groceries,Food & Drink
 TONOS CAFE,Tonos Cafe,Coffee & Drinks,Food & Drink
