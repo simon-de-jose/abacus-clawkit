@@ -111,6 +111,48 @@ function showCategoryPicker(transactionId, currentCategory, onSave) {
         });
 }
 
+// Phase 3: Mobile transaction card layout
+function createMobileTransactionCard(transaction, onCategoryChange) {
+    const card = document.createElement('div');
+    card.className = 'mobile-transaction-card';
+    const isNegative = transaction.amount < 0;
+    
+    card.innerHTML = `
+        <div class="mobile-txn-line1">
+            <div class="mobile-txn-merchant">
+                ${transaction.merchant || transaction.description}
+                ${transaction.needs_review ? '<span class="badge needs-review">Review</span>' : ''}
+            </div>
+            <div class="mobile-txn-amount ${isNegative ? 'negative' : 'positive'}">
+                ${formatCurrency(transaction.amount)}
+            </div>
+        </div>
+        <div class="mobile-txn-line2">
+            <div class="mobile-txn-category">
+                <span class="editable category-edit" data-id="${transaction.id}" data-current="${transaction.category || ''}" data-group="${transaction.category_group || ''}">
+                    ${transaction.category || 'Uncategorized'}
+                </span>
+            </div>
+            <div class="mobile-txn-date">
+                ${formatDate(transaction.transaction_date)}
+            </div>
+        </div>
+    `;
+    
+    // Add click handler for category edit
+    const categoryCell = card.querySelector('.category-edit');
+    if (categoryCell && onCategoryChange) {
+        categoryCell.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const currentCategory = categoryCell.dataset.current;
+            const transactionId = categoryCell.dataset.id;
+            showCategoryPicker(transactionId, currentCategory, onCategoryChange);
+        });
+    }
+    
+    return card;
+}
+
 function createPagination(currentPage, totalPages, onPageChange) {
     const pagination = document.createElement('div');
     pagination.className = 'pagination';
