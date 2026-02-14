@@ -38,8 +38,8 @@ except Exception:
 
 
 def get_db():
-    """Get database connection"""
-    return duckdb.connect(DB_PATH, read_only=True)
+    """Get database connection (read-write to avoid DuckDB mixed-mode locking conflicts)"""
+    return duckdb.connect(DB_PATH)
 
 
 @app.get("/")
