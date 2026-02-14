@@ -1714,6 +1714,9 @@ async def get_projects(status: Optional[str] = None):
                 p.color,
                 p.tags,
                 p.location,
+                p.ai_suggested,
+                p.ai_confidence,
+                p.ai_reasoning,
                 COUNT(DISTINCT pt.transaction_id) as transaction_count,
                 COALESCE(SUM(CASE WHEN pt.status = 'accepted' AND t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0) as total_spent
             FROM projects p
@@ -1729,7 +1732,7 @@ async def get_projects(status: Optional[str] = None):
         query += """
             GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.completed_at,
                      p.archived_at, p.start_date, p.end_date, p.budget_amount, p.color,
-                     p.tags, p.location
+                     p.tags, p.location, p.ai_suggested, p.ai_confidence, p.ai_reasoning
             ORDER BY p.created_at DESC
         """
         
@@ -1752,8 +1755,11 @@ async def get_projects(status: Optional[str] = None):
                 "color": row[10],
                 "tags": row[11],
                 "location": row[12],
-                "transaction_count": int(row[13]),
-                "total_spent": float(row[14])
+                "ai_suggested": bool(row[13]) if row[13] is not None else False,
+                "ai_confidence": float(row[14]) if row[14] else None,
+                "ai_reasoning": row[15],
+                "transaction_count": int(row[16]),
+                "total_spent": float(row[17])
             })
         
         return JSONResponse({"projects": projects})
@@ -1771,7 +1777,8 @@ async def get_project(project_id: int):
         # Get project
         project_row = conn.execute("""
             SELECT id, name, description, status, created_at, completed_at, archived_at,
-                   start_date, end_date, budget_amount, color, tags, location
+                   start_date, end_date, budget_amount, color, tags, location,
+                   ai_suggested, ai_confidence, ai_reasoning
             FROM projects
             WHERE id = ?
         """, (project_id,)).fetchone()
@@ -1824,6 +1831,9 @@ async def get_project(project_id: int):
             "color": project_row[10],
             "tags": project_row[11],
             "location": project_row[12],
+            "ai_suggested": bool(project_row[13]) if project_row[13] is not None else False,
+            "ai_confidence": float(project_row[14]) if project_row[14] else None,
+            "ai_reasoning": project_row[15],
             "transaction_count": len(transactions),
             "total_spent": total_spent,
             "transactions": [
@@ -2092,6 +2102,199 @@ async def update_project_status(project_id: int, request: UpdateProjectStatusReq
         return JSONResponse({"success": True})
     except Exception as e:
         print(f"Error in PATCH /api/projects/{project_id}/status: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ========== AI Review Workflow API ==========
+
+class TransactionReviewRequest(BaseModel):
+    action: str  # "accept" or "reject"
+
+
+class SuggestProjectsRequest(BaseModel):
+    lookback_days: Optional[int] = 60
+    min_confidence: Optional[float] = 0.60
+
+
+@app.post("/api/projects/{project_id}/accept")
+async def accept_project(project_id: int):
+    """Accept a draft project: status→active, all proposed transactions→accepted"""
+    try:
+        conn = get_db()
+        
+        # Check if project exists and is draft
+        project = conn.execute("""
+            SELECT id, status, ai_suggested, ai_confidence
+            FROM projects
+            WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_status = project[1]
+        if project_status != 'draft':
+            conn.close()
+            return JSONResponse({"error": "Only draft projects can be accepted"}, status_code=400)
+        
+        # Update project status
+        conn.execute("""
+            UPDATE projects
+            SET status = 'active'
+            WHERE id = ?
+        """, (project_id,))
+        
+        # Accept all proposed transactions
+        conn.execute("""
+            UPDATE project_transactions
+            SET status = 'accepted', reviewed_at = CURRENT_TIMESTAMP
+            WHERE project_id = ? AND status = 'proposed'
+        """, (project_id,))
+        
+        # Log to learning table if AI suggested
+        if project[2]:  # ai_suggested
+            conn.execute("""
+                INSERT INTO ai_learning_log (project_id, accepted, pattern_type, confidence_at_proposal)
+                SELECT ?, TRUE, match_reason, ?
+                FROM project_transactions
+                WHERE project_id = ? AND match_reason IS NOT NULL
+                LIMIT 1
+            """, (project_id, project[3], project_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/accept: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/{project_id}/reject")
+async def reject_project(project_id: int):
+    """Reject a draft project: status→archived, log rejection"""
+    try:
+        conn = get_db()
+        
+        # Check if project exists
+        project = conn.execute("""
+            SELECT id, status, ai_suggested, ai_confidence
+            FROM projects
+            WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Update project status
+        conn.execute("""
+            UPDATE projects
+            SET status = 'archived', archived_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (project_id,))
+        
+        # Reject all proposed transactions
+        conn.execute("""
+            UPDATE project_transactions
+            SET status = 'rejected', reviewed_at = CURRENT_TIMESTAMP
+            WHERE project_id = ? AND status = 'proposed'
+        """, (project_id,))
+        
+        # Log to learning table if AI suggested
+        if project[2]:  # ai_suggested
+            conn.execute("""
+                INSERT INTO ai_learning_log (project_id, accepted, pattern_type, confidence_at_proposal, feedback_note)
+                SELECT ?, FALSE, match_reason, ?, 'User rejected project'
+                FROM project_transactions
+                WHERE project_id = ? AND match_reason IS NOT NULL
+                LIMIT 1
+            """, (project_id, project[3], project_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/reject: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/{project_id}/transactions/{transaction_id}/review")
+async def review_transaction(project_id: int, transaction_id: str, request: TransactionReviewRequest):
+    """Accept or reject an individual transaction"""
+    try:
+        conn = get_db()
+        
+        # Validate action
+        if request.action not in ['accept', 'reject']:
+            conn.close()
+            return JSONResponse({"error": "Action must be 'accept' or 'reject'"}, status_code=400)
+        
+        # Check if link exists
+        link = conn.execute("""
+            SELECT id FROM project_transactions
+            WHERE project_id = ? AND transaction_id = ?
+        """, (project_id, transaction_id)).fetchone()
+        
+        if not link:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Transaction not linked to this project")
+        
+        # Update status
+        new_status = 'accepted' if request.action == 'accept' else 'rejected'
+        conn.execute("""
+            UPDATE project_transactions
+            SET status = ?, reviewed_at = CURRENT_TIMESTAMP
+            WHERE project_id = ? AND transaction_id = ?
+        """, (new_status, project_id, transaction_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/transactions/{transaction_id}/review: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/suggest")
+async def suggest_projects(request: SuggestProjectsRequest):
+    """Trigger AI detection on-demand and return suggestions created"""
+    try:
+        # Import detector
+        sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+        from project_detector import ProjectDetector
+        
+        # Run detection
+        detector = ProjectDetector(
+            Path(DB_PATH),
+            lookback_days=request.lookback_days,
+            min_confidence=request.min_confidence
+        )
+        
+        try:
+            proposals = detector.detect_all_patterns(dry_run=False)
+        finally:
+            detector.close()
+        
+        # Count how many were created
+        created_count = len([p for p in proposals if p['confidence'] >= request.min_confidence])
+        
+        return JSONResponse({
+            "success": True,
+            "created": created_count,
+            "proposals": proposals
+        })
+    except Exception as e:
+        print(f"Error in POST /api/projects/suggest: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

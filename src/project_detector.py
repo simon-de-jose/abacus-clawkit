@@ -349,7 +349,7 @@ class ProjectDetector:
         return proposals
     
     def _similar_project_exists(self, name_hint: str, start_date: date, end_date: date) -> bool:
-        """Check if a similar project already exists"""
+        """Check if a similar project already exists or was rejected"""
         # Check for date overlap and similar name
         query = """
             SELECT COUNT(*) 
@@ -375,7 +375,35 @@ class ProjectDetector:
             key_words
         )).fetchone()
         
-        return result[0] > 0
+        if result[0] > 0:
+            return True
+        
+        # Check if similar pattern was rejected before
+        rejection_query = """
+            SELECT COUNT(*)
+            FROM ai_learning_log al
+            JOIN projects p ON al.project_id = p.id
+            WHERE al.accepted = FALSE
+                AND (
+                    -- Date range overlaps
+                    (p.start_date <= ? AND (p.end_date IS NULL OR p.end_date >= ?))
+                    OR (p.start_date >= ? AND p.start_date <= ?)
+                )
+                AND LOWER(p.name) LIKE LOWER(?)
+                AND al.feedback_date >= ?
+        """
+        
+        # Only check rejections from the last 90 days
+        lookback_date = date.today() - timedelta(days=90)
+        
+        rejection_result = self.conn.execute(rejection_query, (
+            end_date, start_date,
+            start_date, end_date,
+            key_words,
+            lookback_date
+        )).fetchone()
+        
+        return rejection_result[0] > 0
     
     def create_draft_projects(self, proposals: List[Dict]) -> int:
         """Create draft projects from proposals"""
