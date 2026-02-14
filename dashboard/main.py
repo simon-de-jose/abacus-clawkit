@@ -569,8 +569,8 @@ async def get_top_merchants(
 
 
 @app.get("/api/reports/trends")
-async def get_trends(months: int = 6):
-    """Get spending by category over time (monthly)"""
+async def get_trends(months: int = 6, include_projects: bool = False):
+    """Get spending by category over time (monthly), optionally with project breakdown"""
     try:
         conn = get_db()
         
@@ -588,8 +588,6 @@ async def get_trends(months: int = 6):
             ORDER BY month DESC, total DESC
         """).fetchall()
         
-        conn.close()
-        
         # Group by month
         trends = {}
         for row in result:
@@ -601,9 +599,41 @@ async def get_trends(months: int = 6):
                 trends[month] = {}
             trends[month][category] = amount
         
-        return JSONResponse({
-            "trends": trends
-        })
+        # Optionally get project spending
+        project_spending = None
+        if include_projects:
+            project_result = conn.execute(f"""
+                SELECT 
+                    DATE_TRUNC('month', t.transaction_date) as month,
+                    p.name as project_name,
+                    SUM(ABS(t.amount)) as total
+                FROM project_transactions pt
+                JOIN transactions t ON pt.transaction_id = t.id
+                JOIN projects p ON pt.project_id = p.id
+                WHERE t.amount < 0 
+                AND pt.status = 'accepted'
+                AND t.transaction_date >= CURRENT_DATE - INTERVAL '{months} months'
+                GROUP BY DATE_TRUNC('month', t.transaction_date), p.name
+                ORDER BY month DESC, total DESC
+            """).fetchall()
+            
+            project_spending = {}
+            for row in project_result:
+                month = str(row[0])[:10]
+                project = row[1]
+                amount = round(float(row[2]), 2)
+                
+                if month not in project_spending:
+                    project_spending[month] = {}
+                project_spending[month][project] = amount
+        
+        conn.close()
+        
+        response = {"trends": trends}
+        if project_spending is not None:
+            response["project_spending"] = project_spending
+        
+        return JSONResponse(response)
     except Exception as e:
         print(f"Error in /api/reports/trends: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1654,6 +1684,742 @@ async def get_review_stats():
         })
     except Exception as e:
         print(f"Error in /api/review/stats: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ========== Projects API ==========
+
+class CreateProjectRequest(BaseModel):
+    name: str
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    budget_amount: Optional[float] = None
+    color: Optional[str] = "#3B82F6"
+
+
+class UpdateProjectRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    budget_amount: Optional[float] = None
+    color: Optional[str] = None
+    tags: Optional[str] = None
+    location: Optional[str] = None
+
+
+class AddTransactionsRequest(BaseModel):
+    transaction_ids: List[str]
+
+
+class UpdateProjectStatusRequest(BaseModel):
+    status: str
+
+
+@app.get("/projects")
+async def read_projects():
+    """Serve projects.html"""
+    return FileResponse("static/projects.html")
+
+
+@app.get("/api/projects")
+async def get_projects(status: Optional[str] = None):
+    """List projects with optional status filter, including transaction count and total spent"""
+    try:
+        conn = get_db()
+        
+        query = """
+            SELECT 
+                p.id,
+                p.name,
+                p.description,
+                p.status,
+                p.created_at,
+                p.completed_at,
+                p.archived_at,
+                p.start_date,
+                p.end_date,
+                p.budget_amount,
+                p.color,
+                p.tags,
+                p.location,
+                p.ai_suggested,
+                p.ai_confidence,
+                p.ai_reasoning,
+                COUNT(DISTINCT pt.transaction_id) as transaction_count,
+                COALESCE(SUM(CASE WHEN pt.status = 'accepted' AND t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0) as total_spent
+            FROM projects p
+            LEFT JOIN project_transactions pt ON p.id = pt.project_id
+            LEFT JOIN transactions t ON pt.transaction_id = t.id
+        """
+        
+        params = []
+        if status:
+            query += " WHERE p.status = ?"
+            params.append(status)
+        
+        query += """
+            GROUP BY p.id, p.name, p.description, p.status, p.created_at, p.completed_at,
+                     p.archived_at, p.start_date, p.end_date, p.budget_amount, p.color,
+                     p.tags, p.location, p.ai_suggested, p.ai_confidence, p.ai_reasoning
+            ORDER BY p.created_at DESC
+        """
+        
+        results = conn.execute(query, params).fetchall()
+        conn.close()
+        
+        projects = []
+        for row in results:
+            projects.append({
+                "id": row[0],
+                "name": row[1],
+                "description": row[2],
+                "status": row[3],
+                "created_at": str(row[4]) if row[4] else None,
+                "completed_at": str(row[5]) if row[5] else None,
+                "archived_at": str(row[6]) if row[6] else None,
+                "start_date": str(row[7]) if row[7] else None,
+                "end_date": str(row[8]) if row[8] else None,
+                "budget_amount": float(row[9]) if row[9] else None,
+                "color": row[10],
+                "tags": row[11],
+                "location": row[12],
+                "ai_suggested": bool(row[13]) if row[13] is not None else False,
+                "ai_confidence": float(row[14]) if row[14] else None,
+                "ai_reasoning": row[15],
+                "transaction_count": int(row[16]),
+                "total_spent": float(row[17])
+            })
+        
+        return JSONResponse({"projects": projects})
+    except Exception as e:
+        print(f"Error in GET /api/projects: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/projects/{project_id}")
+async def get_project(project_id: int):
+    """Get project detail with all linked transactions and stats"""
+    try:
+        conn = get_db()
+        
+        # Get project
+        project_row = conn.execute("""
+            SELECT id, name, description, status, created_at, completed_at, archived_at,
+                   start_date, end_date, budget_amount, color, tags, location,
+                   ai_suggested, ai_confidence, ai_reasoning
+            FROM projects
+            WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project_row:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Get linked transactions
+        transactions = conn.execute("""
+            SELECT 
+                t.id, t.transaction_date, t.description, t.merchant, t.category,
+                t.category_group, t.amount, t.account_id, pt.status, pt.match_reason,
+                pt.notes
+            FROM project_transactions pt
+            JOIN transactions t ON pt.transaction_id = t.id
+            WHERE pt.project_id = ?
+            ORDER BY t.transaction_date DESC
+        """, (project_id,)).fetchall()
+        
+        # Get category breakdown (expenses only)
+        category_breakdown = conn.execute("""
+            SELECT 
+                t.category_group,
+                t.category,
+                SUM(ABS(t.amount)) as total
+            FROM project_transactions pt
+            JOIN transactions t ON pt.transaction_id = t.id
+            WHERE pt.project_id = ? AND pt.status = 'accepted' AND t.amount < 0
+            GROUP BY t.category_group, t.category
+            ORDER BY total DESC
+        """, (project_id,)).fetchall()
+        
+        # Calculate stats (only count expenses, not income)
+        total_spent = sum(abs(float(tx[6])) for tx in transactions if tx[8] == 'accepted' and float(tx[6]) < 0)
+        
+        conn.close()
+        
+        project = {
+            "id": project_row[0],
+            "name": project_row[1],
+            "description": project_row[2],
+            "status": project_row[3],
+            "created_at": str(project_row[4]) if project_row[4] else None,
+            "completed_at": str(project_row[5]) if project_row[5] else None,
+            "archived_at": str(project_row[6]) if project_row[6] else None,
+            "start_date": str(project_row[7]) if project_row[7] else None,
+            "end_date": str(project_row[8]) if project_row[8] else None,
+            "budget_amount": float(project_row[9]) if project_row[9] else None,
+            "color": project_row[10],
+            "tags": project_row[11],
+            "location": project_row[12],
+            "ai_suggested": bool(project_row[13]) if project_row[13] is not None else False,
+            "ai_confidence": float(project_row[14]) if project_row[14] else None,
+            "ai_reasoning": project_row[15],
+            "transaction_count": len(transactions),
+            "total_spent": total_spent,
+            "transactions": [
+                {
+                    "id": tx[0],
+                    "transaction_date": str(tx[1]),
+                    "description": tx[2],
+                    "merchant": tx[3],
+                    "category": tx[4],
+                    "category_group": tx[5],
+                    "amount": float(tx[6]),
+                    "account_id": tx[7],
+                    "status": tx[8],
+                    "match_reason": tx[9],
+                    "notes": tx[10]
+                }
+                for tx in transactions
+            ],
+            "category_breakdown": [
+                {
+                    "category_group": cat[0],
+                    "category": cat[1],
+                    "total": float(cat[2])
+                }
+                for cat in category_breakdown
+            ]
+        }
+        
+        return JSONResponse(project)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in GET /api/projects/{project_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects")
+async def create_project(request: CreateProjectRequest):
+    """Create a new project"""
+    try:
+        conn = get_db()
+        
+        # Insert project
+        result = conn.execute("""
+            INSERT INTO projects (name, description, start_date, end_date, budget_amount, color)
+            VALUES (?, ?, ?, ?, ?, ?)
+            RETURNING id
+        """, (
+            request.name,
+            request.description,
+            request.start_date,
+            request.end_date,
+            request.budget_amount,
+            request.color
+        )).fetchone()
+        
+        project_id = result[0]
+        
+        # Get the created project
+        project_row = conn.execute("""
+            SELECT id, name, description, status, created_at, start_date, end_date,
+                   budget_amount, color
+            FROM projects
+            WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({
+            "success": True,
+            "project": {
+                "id": project_row[0],
+                "name": project_row[1],
+                "description": project_row[2],
+                "status": project_row[3],
+                "created_at": str(project_row[4]),
+                "start_date": str(project_row[5]) if project_row[5] else None,
+                "end_date": str(project_row[6]) if project_row[6] else None,
+                "budget_amount": float(project_row[7]) if project_row[7] else None,
+                "color": project_row[8]
+            }
+        })
+    except Exception as e:
+        print(f"Error in POST /api/projects: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.patch("/api/projects/{project_id}")
+async def update_project(project_id: int, request: UpdateProjectRequest):
+    """Update project fields"""
+    try:
+        conn = get_db()
+        
+        # Build dynamic update query
+        updates = []
+        params = []
+        
+        if request.name is not None:
+            updates.append("name = ?")
+            params.append(request.name)
+        if request.description is not None:
+            updates.append("description = ?")
+            params.append(request.description)
+        if request.start_date is not None:
+            updates.append("start_date = ?")
+            params.append(request.start_date)
+        if request.end_date is not None:
+            updates.append("end_date = ?")
+            params.append(request.end_date)
+        if request.budget_amount is not None:
+            updates.append("budget_amount = ?")
+            params.append(request.budget_amount)
+        if request.color is not None:
+            updates.append("color = ?")
+            params.append(request.color)
+        if request.tags is not None:
+            updates.append("tags = ?")
+            params.append(request.tags)
+        if request.location is not None:
+            updates.append("location = ?")
+            params.append(request.location)
+        
+        if not updates:
+            conn.close()
+            return JSONResponse({"error": "No fields to update"}, status_code=400)
+        
+        params.append(project_id)
+        query = f"UPDATE projects SET {', '.join(updates)} WHERE id = ?"
+        
+        conn.execute(query, params)
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except Exception as e:
+        print(f"Error in PATCH /api/projects/{project_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_project(project_id: int):
+    """Delete project (manually cascade to project_transactions since DuckDB doesn't support CASCADE)"""
+    try:
+        conn = get_db()
+        
+        # Check if project exists
+        result = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not result:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Delete project_transactions first
+        conn.execute("DELETE FROM project_transactions WHERE project_id = ?", (project_id,))
+        
+        # Delete project
+        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in DELETE /api/projects/{project_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/{project_id}/transactions")
+async def add_transactions_to_project(project_id: int, request: AddTransactionsRequest):
+    """Add transactions to a project"""
+    try:
+        conn = get_db()
+        
+        # Check if project exists
+        result = conn.execute("SELECT id FROM projects WHERE id = ?", (project_id,)).fetchone()
+        if not result:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Add transactions
+        added_count = 0
+        for transaction_id in request.transaction_ids:
+            try:
+                conn.execute("""
+                    INSERT INTO project_transactions (project_id, transaction_id, status, match_reason)
+                    VALUES (?, ?, 'accepted', 'manual')
+                """, (project_id, transaction_id))
+                added_count += 1
+            except Exception:
+                # Skip duplicates
+                pass
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({
+            "success": True,
+            "added_count": added_count
+        })
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/transactions: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.delete("/api/projects/{project_id}/transactions/{transaction_id}")
+async def remove_transaction_from_project(project_id: int, transaction_id: str):
+    """Remove a transaction from a project"""
+    try:
+        conn = get_db()
+        
+        # Delete the link
+        conn.execute("""
+            DELETE FROM project_transactions
+            WHERE project_id = ? AND transaction_id = ?
+        """, (project_id, transaction_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except Exception as e:
+        print(f"Error in DELETE /api/projects/{project_id}/transactions/{transaction_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.patch("/api/projects/{project_id}/status")
+async def update_project_status(project_id: int, request: UpdateProjectStatusRequest):
+    """Change project status and set appropriate timestamps"""
+    try:
+        conn = get_db()
+        
+        # Validate status
+        valid_statuses = ['draft', 'active', 'complete', 'archived']
+        if request.status not in valid_statuses:
+            conn.close()
+            return JSONResponse({"error": f"Invalid status. Must be one of: {valid_statuses}"}, status_code=400)
+        
+        # Build update based on status
+        if request.status == 'complete':
+            conn.execute("""
+                UPDATE projects
+                SET status = 'complete', completed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (project_id,))
+        elif request.status == 'archived':
+            conn.execute("""
+                UPDATE projects
+                SET status = 'archived', archived_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (project_id,))
+        else:
+            # For draft or active, clear timestamps
+            conn.execute("""
+                UPDATE projects
+                SET status = ?, completed_at = NULL, archived_at = NULL
+                WHERE id = ?
+            """, (request.status, project_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except Exception as e:
+        print(f"Error in PATCH /api/projects/{project_id}/status: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+# ========== AI Review Workflow API ==========
+
+class TransactionReviewRequest(BaseModel):
+    action: str  # "accept" or "reject"
+
+
+class SuggestProjectsRequest(BaseModel):
+    lookback_days: Optional[int] = 60
+    min_confidence: Optional[float] = 0.60
+
+
+@app.post("/api/projects/{project_id}/accept")
+async def accept_project(project_id: int):
+    """Accept a draft project: status→active, all proposed transactions→accepted"""
+    try:
+        conn = get_db()
+        
+        # Check if project exists and is draft
+        project = conn.execute("""
+            SELECT id, status, ai_suggested, ai_confidence
+            FROM projects
+            WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_status = project[1]
+        if project_status != 'draft':
+            conn.close()
+            return JSONResponse({"error": "Only draft projects can be accepted"}, status_code=400)
+        
+        # Update project status
+        conn.execute("""
+            UPDATE projects
+            SET status = 'active'
+            WHERE id = ?
+        """, (project_id,))
+        
+        # Accept all proposed transactions
+        conn.execute("""
+            UPDATE project_transactions
+            SET status = 'accepted', reviewed_at = CURRENT_TIMESTAMP
+            WHERE project_id = ? AND status = 'proposed'
+        """, (project_id,))
+        
+        # Log to learning table if AI suggested
+        if project[2]:  # ai_suggested
+            conn.execute("""
+                INSERT INTO ai_learning_log (project_id, accepted, pattern_type, confidence_at_proposal)
+                SELECT ?, TRUE, match_reason, ?
+                FROM project_transactions
+                WHERE project_id = ? AND match_reason IS NOT NULL
+                LIMIT 1
+            """, (project_id, project[3], project_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/accept: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/{project_id}/reject")
+async def reject_project(project_id: int):
+    """Reject a draft project: status→archived, log rejection"""
+    try:
+        conn = get_db()
+        
+        # Check if project exists
+        project = conn.execute("""
+            SELECT id, status, ai_suggested, ai_confidence
+            FROM projects
+            WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        # Update project status
+        conn.execute("""
+            UPDATE projects
+            SET status = 'archived', archived_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        """, (project_id,))
+        
+        # Reject all proposed transactions
+        conn.execute("""
+            UPDATE project_transactions
+            SET status = 'rejected', reviewed_at = CURRENT_TIMESTAMP
+            WHERE project_id = ? AND status = 'proposed'
+        """, (project_id,))
+        
+        # Log to learning table if AI suggested
+        if project[2]:  # ai_suggested
+            conn.execute("""
+                INSERT INTO ai_learning_log (project_id, accepted, pattern_type, confidence_at_proposal, feedback_note)
+                SELECT ?, FALSE, match_reason, ?, 'User rejected project'
+                FROM project_transactions
+                WHERE project_id = ? AND match_reason IS NOT NULL
+                LIMIT 1
+            """, (project_id, project[3], project_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/reject: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/{project_id}/transactions/{transaction_id}/review")
+async def review_transaction(project_id: int, transaction_id: str, request: TransactionReviewRequest):
+    """Accept or reject an individual transaction"""
+    try:
+        conn = get_db()
+        
+        # Validate action
+        if request.action not in ['accept', 'reject']:
+            conn.close()
+            return JSONResponse({"error": "Action must be 'accept' or 'reject'"}, status_code=400)
+        
+        # Check if link exists
+        link = conn.execute("""
+            SELECT id FROM project_transactions
+            WHERE project_id = ? AND transaction_id = ?
+        """, (project_id, transaction_id)).fetchone()
+        
+        if not link:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Transaction not linked to this project")
+        
+        # Update status
+        new_status = 'accepted' if request.action == 'accept' else 'rejected'
+        conn.execute("""
+            UPDATE project_transactions
+            SET status = ?, reviewed_at = CURRENT_TIMESTAMP
+            WHERE project_id = ? AND transaction_id = ?
+        """, (new_status, project_id, transaction_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return JSONResponse({"success": True})
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in POST /api/projects/{project_id}/transactions/{transaction_id}/review: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/projects/{project_id}/export")
+async def export_project_transactions(project_id: int):
+    """Export project transactions as CSV"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        
+        conn = get_db()
+        
+        # Check if project exists
+        project = conn.execute("""
+            SELECT name FROM projects WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_name = project[0]
+        
+        # Get transactions
+        transactions = conn.execute("""
+            SELECT 
+                t.transaction_date,
+                t.description,
+                t.merchant,
+                t.category,
+                t.category_group,
+                t.amount,
+                t.account_id,
+                pt.status,
+                pt.match_reason
+            FROM project_transactions pt
+            JOIN transactions t ON pt.transaction_id = t.id
+            WHERE pt.project_id = ?
+            ORDER BY t.transaction_date DESC
+        """, (project_id,)).fetchall()
+        
+        conn.close()
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Date', 'Description', 'Merchant', 'Category', 'Category Group',
+            'Amount', 'Account', 'Status', 'Match Reason'
+        ])
+        
+        # Write data
+        for tx in transactions:
+            writer.writerow([
+                str(tx[0]) if tx[0] else '',
+                tx[1] or '',
+                tx[2] or '',
+                tx[3] or '',
+                tx[4] or '',
+                float(tx[5]) if tx[5] else 0,
+                tx[6] or '',
+                tx[7] or '',
+                tx[8] or ''
+            ])
+        
+        # Prepare response
+        output.seek(0)
+        safe_filename = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in project_name)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={safe_filename}_transactions.csv"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in GET /api/projects/{project_id}/export: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/projects/suggest")
+async def suggest_projects(request: SuggestProjectsRequest):
+    """Trigger AI detection on-demand and return suggestions created"""
+    try:
+        # Import detector
+        sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+        from project_detector import ProjectDetector
+        
+        # Run detection
+        detector = ProjectDetector(
+            Path(DB_PATH),
+            lookback_days=request.lookback_days,
+            min_confidence=request.min_confidence
+        )
+        
+        try:
+            proposals = detector.detect_all_patterns(dry_run=False)
+        finally:
+            detector.close()
+        
+        # Count how many were created
+        created_count = len([p for p in proposals if p['confidence'] >= request.min_confidence])
+        
+        # Serialize date objects for JSON
+        serialized_proposals = []
+        for p in proposals:
+            sp = dict(p)
+            if 'start_date' in sp and sp['start_date']:
+                sp['start_date'] = str(sp['start_date'])
+            if 'end_date' in sp and sp['end_date']:
+                sp['end_date'] = str(sp['end_date'])
+            if 'transaction_ids' in sp:
+                sp['transaction_ids'] = list(sp['transaction_ids'])
+            serialized_proposals.append(sp)
+        
+        return JSONResponse({
+            "success": True,
+            "created": created_count,
+            "proposals": serialized_proposals
+        })
+    except Exception as e:
+        print(f"Error in POST /api/projects/suggest: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
