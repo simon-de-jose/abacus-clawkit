@@ -35,11 +35,11 @@ function createDonutChart(elementId, data, title) {
         },
         tooltip: {
             trigger: 'item',
+            confine: true,
             formatter: '{b}: ${c} ({d}%)',
-            // Phase 4: Larger tooltip trigger area on mobile
             triggerOn: isMobile ? 'click' : 'mousemove|click',
-            padding: isMobile ? 12 : 10,
-            textStyle: { fontSize: isMobile ? 13 : 12 }
+            padding: isMobile ? 8 : 10,
+            textStyle: { fontSize: isMobile ? 11 : 12 }
         },
         grid: {
             bottom: 50
@@ -105,6 +105,7 @@ function createBarChart(elementId, categories, data, title) {
         },
         tooltip: {
             trigger: 'axis',
+            confine: true,
             axisPointer: { type: 'shadow' },
             formatter: (params) => {
                 return `${params[0].name}<br/>${params[0].marker} $${params[0].value.toFixed(2)}`;
@@ -163,6 +164,7 @@ function createStackedBarChart(elementId, categories, series, title) {
         },
         tooltip: {
             trigger: 'axis',
+            confine: true,
             axisPointer: { type: 'shadow' }
         },
         legend: {
@@ -211,6 +213,7 @@ function createLineChart(elementId, categories, series, title) {
         },
         tooltip: {
             trigger: 'axis'
+            confine: true,
         },
         legend: {
             top: 30,
@@ -259,6 +262,7 @@ function createSankeyChart(elementId, nodes, links, title) {
         },
         tooltip: {
             trigger: 'item',
+            confine: true,
             formatter: (params) => {
                 if (params.dataType === 'edge') {
                     return `${params.data.source} → ${params.data.target}<br/>$${params.data.value.toFixed(2)}`;
@@ -306,6 +310,7 @@ function createHorizontalBarChart(elementId, categories, data, title) {
         },
         tooltip: {
             trigger: 'axis',
+            confine: true,
             axisPointer: { type: 'shadow' },
             formatter: (params) => {
                 return `${params[0].name}<br/>${params[0].marker} $${params[0].value.toFixed(2)}`;
@@ -355,6 +360,7 @@ function createStackedAreaChart(elementId, categories, series, title) {
         },
         tooltip: {
             trigger: 'axis',
+            confine: true,
             axisPointer: { type: 'cross' }
         },
         legend: {
@@ -408,6 +414,7 @@ function createDonutWithCenterLabel(elementId, data, centerLabel, title) {
         },
         tooltip: {
             trigger: 'item',
+            confine: true,
             formatter: '{b}: ${c} ({d}%)'
         },
         graphic: {
