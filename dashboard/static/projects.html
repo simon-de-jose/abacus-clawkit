@@ -418,6 +418,79 @@
             color: var(--coral);
             font-family: 'SF Mono', 'Monaco', monospace;
         }
+
+        /* AI Suggested Projects */
+        .ai-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .ai-confidence {
+            font-size: 0.75rem;
+            color: var(--gray-text);
+            margin-top: 0.5rem;
+        }
+
+        .ai-reasoning {
+            font-size: 0.875rem;
+            color: var(--gray-text);
+            background: var(--gray-bg);
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin-top: 0.75rem;
+            font-style: italic;
+        }
+
+        .review-actions {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .review-actions .btn-secondary {
+            flex: 1;
+        }
+
+        .transaction-review-btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .transaction-review-btn.accept {
+            background: var(--mint);
+            color: white;
+        }
+
+        .transaction-review-btn.reject {
+            background: var(--coral);
+            color: white;
+        }
+
+        .transaction-review-btn:hover {
+            opacity: 0.85;
+        }
+
+        .btn-secondary {
+            background: var(--gray-bg);
+            color: var(--navy);
+            border: 1px solid var(--gray-border);
+        }
+
+        .btn-secondary:hover {
+            background: var(--gray-border);
+        }
     </style>
 </head>
 <body data-page="Projects">
@@ -429,11 +502,17 @@
                     <h2>Projects</h2>
                     <p>Track and manage your financial projects</p>
                 </div>
-                <button class="btn-primary" onclick="openNewProjectModal()">+ New Project</button>
+                <div style="display: flex; gap: 0.75rem;">
+                    <button class="btn-secondary" onclick="suggestProjects()" id="suggest-btn">
+                        🤖 Suggest Projects
+                    </button>
+                    <button class="btn-primary" onclick="openNewProjectModal()">+ New Project</button>
+                </div>
             </div>
 
             <div class="status-tabs">
                 <button class="status-tab active" data-status="active" onclick="filterByStatus('active')">Active</button>
+                <button class="status-tab" data-status="draft" onclick="filterByStatus('draft')">🤖 Suggested</button>
                 <button class="status-tab" data-status="complete" onclick="filterByStatus('complete')">Complete</button>
                 <button class="status-tab" data-status="archived" onclick="filterByStatus('archived')">Archived</button>
                 <button class="status-tab" data-status="" onclick="filterByStatus('')">All</button>
@@ -554,11 +633,29 @@
                 grid.innerHTML = '';
 
                 if (data.projects.length === 0) {
-                    grid.innerHTML = `
-                        <div class="empty-state" style="grid-column: 1 / -1;">
+                    let emptyStateContent;
+                    if (status === 'draft') {
+                        emptyStateContent = `
+                            <div class="empty-state-icon">🤖</div>
+                            <h3>No suggestions yet</h3>
+                            <p>Click "🤖 Suggest Projects" to analyze your transactions for potential projects</p>
+                        `;
+                    } else if (status === 'active') {
+                        emptyStateContent = `
+                            <div class="empty-state-icon">📁</div>
+                            <h3>No active projects</h3>
+                            <p>Create a new project or let AI suggest one for you</p>
+                        `;
+                    } else {
+                        emptyStateContent = `
                             <div class="empty-state-icon">📁</div>
                             <h3>No projects found</h3>
                             <p>Create your first project to get started</p>
+                        `;
+                    }
+                    grid.innerHTML = `
+                        <div class="empty-state" style="grid-column: 1 / -1;">
+                            ${emptyStateContent}
                         </div>
                     `;
                     return;
@@ -579,15 +676,31 @@
             const card = document.createElement('div');
             card.className = 'project-card';
             card.style.borderLeftColor = project.color || '#3B82F6';
-            card.onclick = () => viewProject(project.id);
 
             const dateRange = formatDateRange(project.start_date, project.end_date);
             const budgetSection = project.budget_amount ? createBudgetSection(project.total_spent, project.budget_amount) : '';
 
-            card.innerHTML = `
+            // AI badge and info for suggested projects
+            const aiInfo = project.ai_suggested ? `
+                <div class="ai-badge">🤖 AI Suggested</div>
+                ${project.ai_confidence ? `<div class="ai-confidence">Confidence: ${(project.ai_confidence * 100).toFixed(0)}%</div>` : ''}
+                ${project.ai_reasoning ? `<div class="ai-reasoning">${escapeHtml(project.ai_reasoning)}</div>` : ''}
+            ` : '';
+
+            // Review actions for draft projects
+            const reviewActions = project.status === 'draft' ? `
+                <div class="review-actions" onclick="event.stopPropagation()">
+                    <button class="btn-secondary" onclick="acceptProject(${project.id})">✓ Accept</button>
+                    <button class="btn-secondary" onclick="editProject(${project.id})">✏️ Edit</button>
+                    <button class="btn-secondary" onclick="rejectProject(${project.id})">✗ Reject</button>
+                </div>
+            ` : '';
+
+            const cardContent = `
                 <div class="project-card-header">
                     <div class="project-name">${escapeHtml(project.name)}</div>
                 </div>
+                ${aiInfo}
                 ${project.description ? `<div class="project-description">${escapeHtml(project.description)}</div>` : ''}
                 ${dateRange ? `<div class="project-dates">${dateRange}</div>` : ''}
                 <div class="project-stats">
@@ -601,7 +714,17 @@
                     </div>
                 </div>
                 ${budgetSection}
+                ${reviewActions}
             `;
+
+            card.innerHTML = cardContent;
+
+            // Only add click handler if not a draft (draft cards have their own buttons)
+            if (project.status !== 'draft') {
+                card.onclick = () => viewProject(project.id);
+            } else {
+                card.style.cursor = 'default';
+            }
 
             return card;
         }
@@ -639,6 +762,109 @@
             return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         }
 
+        // AI Review Workflow Functions
+        async function suggestProjects() {
+            const btn = document.getElementById('suggest-btn');
+            const originalText = btn.textContent;
+            btn.textContent = '🔍 Analyzing...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/projects/suggest', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lookback_days: 90, min_confidence: 0.60 })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✅ Found ${data.created} new project suggestions!`);
+                    // Switch to draft tab and reload
+                    filterByStatus('draft');
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error suggesting projects:', error);
+                alert('❌ Error suggesting projects');
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function acceptProject(projectId) {
+            if (!confirm('Accept this project and all its transactions?')) return;
+
+            try {
+                const response = await fetch(`/api/projects/${projectId}/accept`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('✅ Project accepted!');
+                    loadProjects(currentFilter);
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error accepting project:', error);
+                alert('❌ Error accepting project');
+            }
+        }
+
+        async function rejectProject(projectId) {
+            if (!confirm('Reject this project? It will be archived.')) return;
+
+            try {
+                const response = await fetch(`/api/projects/${projectId}/reject`, {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert('Project rejected');
+                    loadProjects(currentFilter);
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error rejecting project:', error);
+                alert('❌ Error rejecting project');
+            }
+        }
+
+        function editProject(projectId) {
+            // Open project detail view which allows editing
+            viewProject(projectId);
+        }
+
+        async function reviewTransaction(projectId, transactionId, action) {
+            try {
+                const response = await fetch(`/api/projects/${projectId}/transactions/${transactionId}/review`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Reload project detail
+                    viewProject(projectId);
+                } else {
+                    alert('❌ Error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error reviewing transaction:', error);
+                alert('❌ Error reviewing transaction');
+            }
+        }
+
         async function viewProject(projectId) {
             try {
                 const response = await fetch(`/api/projects/${projectId}`);
@@ -654,10 +880,21 @@
                         <div class="detail-title-section">
                             <div class="detail-title" style="border-left: 4px solid ${project.color}; padding-left: 1rem;">
                                 ${escapeHtml(project.name)}
+                                ${project.ai_suggested ? '<span class="ai-badge" style="margin-left: 0.5rem;">🤖 AI Suggested</span>' : ''}
                             </div>
                             ${project.description ? `<p style="color: var(--gray-text); margin-left: 1.25rem;">${escapeHtml(project.description)}</p>` : ''}
+                            ${project.ai_suggested && project.ai_reasoning ? `
+                                <div class="ai-reasoning" style="margin-left: 1.25rem; margin-top: 0.5rem;">
+                                    ${escapeHtml(project.ai_reasoning)}
+                                    ${project.ai_confidence ? ` (Confidence: ${(project.ai_confidence * 100).toFixed(0)}%)` : ''}
+                                </div>
+                            ` : ''}
                         </div>
                         <div class="detail-actions">
+                            ${project.status === 'draft' ? `
+                                <button class="btn-primary" onclick="acceptProject(${project.id})">✓ Accept Project</button>
+                                <button class="btn-secondary" onclick="rejectProject(${project.id})">✗ Reject</button>
+                            ` : ''}
                             ${project.status === 'active' ? '<button class="btn-secondary" onclick="completeProject()">Mark Complete</button>' : ''}
                             ${project.status === 'complete' ? '<button class="btn-secondary" onclick="archiveProject()">Archive</button>' : ''}
                             <button class="btn-secondary" onclick="deleteProject()">Delete</button>
@@ -725,14 +962,22 @@
                                     ${project.transactions.map(txn => `
                                         <tr>
                                             <td>${formatDate(txn.transaction_date)}</td>
-                                            <td>${escapeHtml(txn.description)}</td>
+                                            <td>
+                                                ${escapeHtml(txn.description)}
+                                                ${txn.status === 'proposed' ? '<span style="color: var(--gray-text); font-size: 0.75rem;"> (proposed)</span>' : ''}
+                                            </td>
                                             <td>${escapeHtml(txn.category)}</td>
                                             <td style="font-family: 'SF Mono', monospace; font-weight: 600; color: var(--coral);">
                                                 $${Math.abs(txn.amount).toFixed(2)}
                                             </td>
                                             <td>
-                                                <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" 
-                                                        onclick="removeTransaction('${txn.id}')">Remove</button>
+                                                ${project.status === 'draft' && txn.status === 'proposed' ? `
+                                                    <button class="transaction-review-btn accept" onclick="reviewTransaction(${project.id}, '${txn.id}', 'accept')">✓</button>
+                                                    <button class="transaction-review-btn reject" onclick="reviewTransaction(${project.id}, '${txn.id}', 'reject')">✗</button>
+                                                ` : `
+                                                    <button class="btn-secondary" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" 
+                                                            onclick="removeTransaction('${txn.id}')">Remove</button>
+                                                `}
                                             </td>
                                         </tr>
                                     `).join('')}

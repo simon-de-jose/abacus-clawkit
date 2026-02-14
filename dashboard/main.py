@@ -569,8 +569,8 @@ async def get_top_merchants(
 
 
 @app.get("/api/reports/trends")
-async def get_trends(months: int = 6):
-    """Get spending by category over time (monthly)"""
+async def get_trends(months: int = 6, include_projects: bool = False):
+    """Get spending by category over time (monthly), optionally with project breakdown"""
     try:
         conn = get_db()
         
@@ -588,8 +588,6 @@ async def get_trends(months: int = 6):
             ORDER BY month DESC, total DESC
         """).fetchall()
         
-        conn.close()
-        
         # Group by month
         trends = {}
         for row in result:
@@ -601,9 +599,41 @@ async def get_trends(months: int = 6):
                 trends[month] = {}
             trends[month][category] = amount
         
-        return JSONResponse({
-            "trends": trends
-        })
+        # Optionally get project spending
+        project_spending = None
+        if include_projects:
+            project_result = conn.execute(f"""
+                SELECT 
+                    DATE_TRUNC('month', t.transaction_date) as month,
+                    p.name as project_name,
+                    SUM(ABS(t.amount)) as total
+                FROM project_transactions pt
+                JOIN transactions t ON pt.transaction_id = t.id
+                JOIN projects p ON pt.project_id = p.id
+                WHERE t.amount < 0 
+                AND pt.status = 'accepted'
+                AND t.transaction_date >= CURRENT_DATE - INTERVAL '{months} months'
+                GROUP BY DATE_TRUNC('month', t.transaction_date), p.name
+                ORDER BY month DESC, total DESC
+            """).fetchall()
+            
+            project_spending = {}
+            for row in project_result:
+                month = str(row[0])[:10]
+                project = row[1]
+                amount = round(float(row[2]), 2)
+                
+                if month not in project_spending:
+                    project_spending[month] = {}
+                project_spending[month][project] = amount
+        
+        conn.close()
+        
+        response = {"trends": trends}
+        if project_spending is not None:
+            response["project_spending"] = project_spending
+        
+        return JSONResponse(response)
     except Exception as e:
         print(f"Error in /api/reports/trends: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -2262,6 +2292,89 @@ async def review_transaction(project_id: int, transaction_id: str, request: Tran
         raise
     except Exception as e:
         print(f"Error in POST /api/projects/{project_id}/transactions/{transaction_id}/review: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/projects/{project_id}/export")
+async def export_project_transactions(project_id: int):
+    """Export project transactions as CSV"""
+    try:
+        from fastapi.responses import StreamingResponse
+        import io
+        import csv
+        
+        conn = get_db()
+        
+        # Check if project exists
+        project = conn.execute("""
+            SELECT name FROM projects WHERE id = ?
+        """, (project_id,)).fetchone()
+        
+        if not project:
+            conn.close()
+            raise HTTPException(status_code=404, detail="Project not found")
+        
+        project_name = project[0]
+        
+        # Get transactions
+        transactions = conn.execute("""
+            SELECT 
+                t.transaction_date,
+                t.description,
+                t.merchant,
+                t.category,
+                t.category_group,
+                t.amount,
+                t.account_id,
+                pt.status,
+                pt.match_reason
+            FROM project_transactions pt
+            JOIN transactions t ON pt.transaction_id = t.id
+            WHERE pt.project_id = ?
+            ORDER BY t.transaction_date DESC
+        """, (project_id,)).fetchall()
+        
+        conn.close()
+        
+        # Create CSV in memory
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Write header
+        writer.writerow([
+            'Date', 'Description', 'Merchant', 'Category', 'Category Group',
+            'Amount', 'Account', 'Status', 'Match Reason'
+        ])
+        
+        # Write data
+        for tx in transactions:
+            writer.writerow([
+                str(tx[0]) if tx[0] else '',
+                tx[1] or '',
+                tx[2] or '',
+                tx[3] or '',
+                tx[4] or '',
+                float(tx[5]) if tx[5] else 0,
+                tx[6] or '',
+                tx[7] or '',
+                tx[8] or ''
+            ])
+        
+        # Prepare response
+        output.seek(0)
+        safe_filename = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in project_name)
+        
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f"attachment; filename={safe_filename}_transactions.csv"
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in GET /api/projects/{project_id}/export: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
