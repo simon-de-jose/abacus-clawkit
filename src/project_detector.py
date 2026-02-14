@@ -47,6 +47,20 @@ KEYWORD_PATTERNS = {
 class ProjectDetector:
     """Analyzes transactions and detects potential projects"""
     
+    # These merchants transact everywhere or auto-charge — NOT indicators of being home
+    LOCATION_AGNOSTIC_MERCHANTS = [
+        "uber", "lyft",  # Used in any city
+        "amazon", "amzn",  # Online shopping from anywhere
+        "apple", "google",  # Subscriptions auto-charge
+        "huberman", "personality",  # Subscriptions
+        "netflix", "spotify", "youtube",  # Streaming
+        "chase", "venmo", "zelle", "optum", "payment",  # Financial transfers
+        "tesla",  # Auto insurance charges regardless
+        "supra re",  # Rent charges regardless
+        "chewy",  # Pet food auto-ships
+        "rover",  # Pet sitting (set up in advance)
+    ]
+    
     # Location hints for trip detection
     LOCATION_HINTS = {
         "France": ["paris", "avignon", "marseille", "french", "sncf", "france", "lyon", "nice", "cannes",
@@ -60,13 +74,19 @@ class ProjectDetector:
         "Japan": ["tokyo", "japan", "shinkansen", "narita", "haneda", "konbini", "lawson", "7-eleven jp"],
         "UK": ["london", "heathrow", "gatwick", "british airways", "tfl", "oyster"],
         "Italy": ["roma", "rome", "milano", "venice", "firenze", "florence", "trenitalia"],
-        "Generic Foreign": ["duty free", "airport", "forex", "currency exchange"]
+        "Generic Foreign": ["duty free", "airport", "forex", "currency exchange", "tsa precheck"]
     }
     
-    # Advance booking merchants
-    ADVANCE_MERCHANTS = ["booking.com", "airbnb", "vrbo", "expedia", "hotels.com",
-                         "airline", "flight", "delta", "united", "american air", "southwest",
-                         "kayak", "hopper", "travel insurance"]
+    # Only these count as advance bookings
+    ADVANCE_BOOKING_MERCHANTS = [
+        "booking.com", "airbnb", "vrbo", "expedia", "hotels.com",
+        "american airlines", "delta", "united", "southwest", "spirit",
+        "jetblue", "alaska air", "hawaiian air", "frontier",
+        "hertz", "enterprise", "avis", "national car", "budget rent"
+    ]
+    
+    # Minimum amount for advance booking (skip small charges like fees)
+    MIN_ADVANCE_BOOKING_AMOUNT = 50.00
     
     def __init__(self, db_path: Path, lookback_days: int = 60, min_confidence: float = 0.60):
         self.db_path = db_path
@@ -214,11 +234,18 @@ class ProjectDetector:
         proposals = []
         cutoff_date = date.today() - timedelta(days=self.lookback_days)
         
-        # Step 1: Build home merchant baseline
-        home_merchants_query = """
+        # Step 1: Build home merchant baseline (excluding location-agnostic merchants)
+        # Build exclusion condition for location-agnostic merchants
+        agnostic_conditions = " AND ".join([
+            f"LOWER(merchant) NOT LIKE '%{merchant}%'"
+            for merchant in self.LOCATION_AGNOSTIC_MERCHANTS
+        ])
+        
+        home_merchants_query = f"""
             SELECT DISTINCT merchant
             FROM transactions
             WHERE merchant IS NOT NULL
+                AND ({agnostic_conditions})
             GROUP BY merchant
             HAVING COUNT(DISTINCT strftime(transaction_date, '%Y-%m')) >= 3
                 AND COUNT(*) >= 6
@@ -231,7 +258,8 @@ class ProjectDetector:
         
         print(f"   Identified {len(home_merchants)} home merchants as baseline")
         
-        # Step 2: Find away periods (3+ consecutive days without home merchants but with activity)
+        # Step 2: Find away periods (3+ consecutive days with foreign transactions)
+        # STRONG HOME SIGNAL: A day is HOME only if it has NO foreign-looking transactions
         # Get all transaction dates in the lookback period
         all_dates_query = """
             SELECT DISTINCT transaction_date
@@ -245,50 +273,64 @@ class ProjectDetector:
         if not all_dates:
             return proposals
         
-        # For each date, check if it has home merchant activity
-        away_periods = []
-        current_away_start = None
-        current_away_end = None
+        # Build all location hint keywords into one search
+        all_location_keywords = []
+        for location, keywords in self.LOCATION_HINTS.items():
+            all_location_keywords.extend(keywords)
+        
+        # For each date, check if it has foreign transactions
+        # Build a map of dates with foreign activity for smarter period detection
+        foreign_dates = set()
         
         for current_date in all_dates:
-            # Check if this date has home merchant transactions
-            home_check_query = """
-                SELECT COUNT(*)
-                FROM transactions
-                WHERE transaction_date = ?
-                    AND LOWER(merchant) IN ({})
-            """.format(','.join(['?' for _ in home_merchants]))
+            # Check if this date has ANY foreign-looking transactions
+            # Escape single quotes in keywords for SQL
+            foreign_conditions = " OR ".join([
+                f"LOWER(merchant) LIKE '%{kw.replace(chr(39), chr(39)+chr(39))}%' OR LOWER(description) LIKE '%{kw.replace(chr(39), chr(39)+chr(39))}%'"
+                for kw in all_location_keywords
+            ])
             
-            has_home = self.conn.execute(home_check_query, [current_date] + home_merchants).fetchone()[0] > 0
-            
-            # Check if this date has any non-home transactions
-            non_home_check_query = """
+            foreign_check_query = f"""
                 SELECT COUNT(*)
                 FROM transactions
                 WHERE transaction_date = ?
                     AND amount < 0
-                    AND (merchant IS NULL OR LOWER(merchant) NOT IN ({}))
-            """.format(','.join(['?' for _ in home_merchants]))
+                    AND ({foreign_conditions})
+            """
             
-            has_non_home = self.conn.execute(non_home_check_query, [current_date] + home_merchants).fetchone()[0] > 0
-            
-            if not has_home and has_non_home:
-                # We're in an away period
+            has_foreign = self.conn.execute(foreign_check_query, (current_date,)).fetchone()[0] > 0
+            if has_foreign:
+                foreign_dates.add(current_date)
+        
+        # Build away periods, allowing 1-2 day gaps within trips
+        away_periods = []
+        current_away_start = None
+        current_away_end = None
+        days_since_last_foreign = 0
+        
+        for current_date in all_dates:
+            if current_date in foreign_dates:
+                # Foreign transaction day
                 if current_away_start is None:
                     current_away_start = current_date
                 current_away_end = current_date
+                days_since_last_foreign = 0
             else:
-                # Back home or no activity
+                # No foreign transactions today
                 if current_away_start is not None:
-                    # Check if away period is 3+ days
-                    days_away = (current_away_end - current_away_start).days + 1
-                    if days_away >= 3:
-                        away_periods.append({
-                            'start_date': current_away_start,
-                            'end_date': current_away_end
-                        })
-                    current_away_start = None
-                    current_away_end = None
+                    days_since_last_foreign += 1
+                    
+                    # If we've had 3+ days without foreign transactions, end the away period
+                    if days_since_last_foreign >= 3:
+                        days_away = (current_away_end - current_away_start).days + 1
+                        if days_away >= 3:
+                            away_periods.append({
+                                'start_date': current_away_start,
+                                'end_date': current_away_end
+                            })
+                        current_away_start = None
+                        current_away_end = None
+                        days_since_last_foreign = 0
         
         # Close any remaining away period
         if current_away_start is not None:
@@ -299,17 +341,17 @@ class ProjectDetector:
                     'end_date': current_away_end
                 })
         
-        # Step 2.5: Merge away periods that are close together (within 2 days)
+        # Step 2.5: Merge away periods that are close together (within 4 days)
         # This handles multi-destination trips where there might be brief home activity
         merged_periods = []
         if away_periods:
             current_merged = away_periods[0].copy()
             
             for period in away_periods[1:]:
-                # Check if this period is within 2 days of the current merged period
+                # Check if this period is within 4 days of the current merged period
                 days_gap = (period['start_date'] - current_merged['end_date']).days
                 
-                if days_gap <= 3:  # 3 days or less gap (allows for 1-2 day home breaks)
+                if days_gap <= 5:  # 5 days or less gap (allows for 3-4 day quiet periods)
                     # Merge into current period
                     current_merged['end_date'] = period['end_date']
                 else:
@@ -323,19 +365,87 @@ class ProjectDetector:
         away_periods = merged_periods
         print(f"   Found {len(away_periods)} potential away periods (after merging)")
         
+        # Step 2.75: Expand trip boundaries to include travel transactions before/after
+        # Look for flights, airports, car rentals 3 days before start and after end
+        travel_keywords = ["flight", "airline", "airport", "tsa", "delta", "united", "american air",
+                          "southwest", "spirit", "jetblue", "alaska air", "car rental", "hertz",
+                          "enterprise", "avis", "national car", "budget rent"]
+        
+        expanded_periods = []
+        for period in away_periods:
+            start_date = period['start_date']
+            end_date = period['end_date']
+            
+            # Look 3 days before for departure-related transactions
+            pre_window_start = start_date - timedelta(days=3)
+            pre_window_end = start_date - timedelta(days=1)
+            
+            if pre_window_end >= pre_window_start:
+                travel_conditions = " OR ".join([
+                    f"LOWER(merchant) LIKE '%{kw}%' OR LOWER(description) LIKE '%{kw}%'"
+                    for kw in travel_keywords
+                ])
+                
+                pre_travel_query = f"""
+                    SELECT MIN(transaction_date)
+                    FROM transactions
+                    WHERE transaction_date BETWEEN ? AND ?
+                        AND amount < 0
+                        AND ({travel_conditions})
+                """
+                
+                pre_travel_date = self.conn.execute(pre_travel_query, (pre_window_start, pre_window_end)).fetchone()[0]
+                if pre_travel_date:
+                    start_date = pre_travel_date
+            
+            # Look 3 days after for return-related transactions
+            post_window_start = end_date + timedelta(days=1)
+            post_window_end = end_date + timedelta(days=3)
+            
+            travel_conditions = " OR ".join([
+                f"LOWER(merchant) LIKE '%{kw}%' OR LOWER(description) LIKE '%{kw}%'"
+                for kw in travel_keywords
+            ])
+            
+            post_travel_query = f"""
+                SELECT MAX(transaction_date)
+                FROM transactions
+                WHERE transaction_date BETWEEN ? AND ?
+                    AND amount < 0
+                    AND ({travel_conditions})
+            """
+            
+            post_travel_date = self.conn.execute(post_travel_query, (post_window_start, post_window_end)).fetchone()[0]
+            if post_travel_date:
+                end_date = post_travel_date
+            
+            expanded_periods.append({
+                'start_date': start_date,
+                'end_date': end_date
+            })
+        
+        away_periods = expanded_periods
+        
         # Step 3: For each away period, detect locations and build trip proposal
         for period in away_periods:
             start_date = period['start_date']
             end_date = period['end_date']
             
-            # Get all transactions during this period
-            trip_txns_query = """
+            # Get all transactions during this period (excluding home merchants AND location-agnostic)
+            # Build exclusion conditions for location-agnostic merchants
+            agnostic_exclusions = " AND ".join([
+                f"LOWER(merchant) NOT LIKE '%{merchant}%'"
+                for merchant in self.LOCATION_AGNOSTIC_MERCHANTS
+            ])
+            
+            trip_txns_query = f"""
                 SELECT id, merchant, description
                 FROM transactions
                 WHERE transaction_date BETWEEN ? AND ?
                     AND amount < 0
-                    AND (merchant IS NULL OR LOWER(merchant) NOT IN ({}))
-            """.format(','.join(['?' for _ in home_merchants]))
+                    AND (merchant IS NULL OR LOWER(merchant) NOT IN ({','.join(['?' for _ in home_merchants])}))
+                    AND ({agnostic_exclusions})
+            """
             
             trip_txns = self.conn.execute(trip_txns_query, [start_date, end_date] + home_merchants).fetchall()
             
@@ -440,9 +550,10 @@ class ProjectDetector:
         if advance_window_end < advance_window_start:
             return []
         
-        # Build merchant conditions
+        # Build merchant conditions - only specific travel booking merchants
         advance_conditions = " OR ".join([
-            f"LOWER(merchant) LIKE '%{merchant}%'" for merchant in self.ADVANCE_MERCHANTS
+            f"LOWER(merchant) LIKE '%{merchant}%' OR LOWER(description) LIKE '%{merchant}%'"
+            for merchant in self.ADVANCE_BOOKING_MERCHANTS
         ])
         
         query = f"""
@@ -450,16 +561,15 @@ class ProjectDetector:
             FROM transactions
             WHERE transaction_date BETWEEN ? AND ?
                 AND amount < 0
-                AND (
-                    {advance_conditions}
-                    OR LOWER(description) LIKE '%booking%'
-                    OR LOWER(description) LIKE '%airbnb%'
-                    OR category IN ('Hotels', 'Flights', 'Car Rental')
-                    OR category_group = 'Travel'
-                )
+                AND ABS(amount) >= ?
+                AND ({advance_conditions})
         """
         
-        results = self.conn.execute(query, (advance_window_start, advance_window_end)).fetchall()
+        results = self.conn.execute(query, (
+            advance_window_start,
+            advance_window_end,
+            self.MIN_ADVANCE_BOOKING_AMOUNT
+        )).fetchall()
         
         advance_bookings = []
         for txn_id, txn_date, merchant, description, amount in results:
