@@ -56,7 +56,7 @@ function createDonutChart(elementId, data, title) {
         },
         series: [{
             type: 'pie',
-            radius: ['35%', '65%'],
+            radius: isMobile ? ['30%', '55%'] : ['35%', '65%'],
             center: ['50%', '46%'],
             avoidLabelOverlap: true,
             itemStyle: {
@@ -64,13 +64,18 @@ function createDonutChart(elementId, data, title) {
                 borderColor: '#fff',
                 borderWidth: 2
             },
-            label: { show: false },
+            label: {
+                show: false,
+                position: 'center'
+            },
             labelLine: { show: false },
             emphasis: {
                 label: {
-                    show: !isMobile,
-                    fontSize: 14,
-                    fontWeight: 'bold'
+                    show: true,
+                    position: 'center',
+                    fontSize: isMobile ? 12 : 14,
+                    fontWeight: 'bold',
+                    formatter: '{b}\n{d}%'
                 }
             },
             data: data.map((item, i) => ({
@@ -419,7 +424,7 @@ function createDonutWithCenterLabel(elementId, data, centerLabel, title) {
         },
         series: [{
             type: 'pie',
-            radius: ['45%', '70%'],
+            radius: isMobile ? ['35%', '58%'] : ['45%', '70%'],
             center: ['50%', '55%'],
             avoidLabelOverlap: false,
             itemStyle: {
@@ -427,13 +432,18 @@ function createDonutWithCenterLabel(elementId, data, centerLabel, title) {
                 borderColor: '#fff',
                 borderWidth: 2
             },
-            label: { show: false },
+            label: {
+                show: false,
+                position: 'center'
+            },
             labelLine: { show: false },
             emphasis: {
                 label: {
-                    show: !isMobile,
-                    fontSize: 14,
-                    fontWeight: 'bold'
+                    show: true,
+                    position: 'center',
+                    fontSize: isMobile ? 12 : 14,
+                    fontWeight: 'bold',
+                    formatter: '{b}\n{d}%'
                 }
             },
             data: data.map((item, i) => ({
