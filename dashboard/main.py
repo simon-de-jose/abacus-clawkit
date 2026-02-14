@@ -1748,7 +1748,7 @@ async def get_projects(status: Optional[str] = None):
                 p.ai_confidence,
                 p.ai_reasoning,
                 COUNT(DISTINCT pt.transaction_id) as transaction_count,
-                COALESCE(SUM(CASE WHEN pt.status = 'accepted' AND t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0) as total_spent
+                COALESCE(SUM(CASE WHEN pt.status IN ('accepted', 'proposed') AND t.amount < 0 THEN ABS(t.amount) ELSE 0 END), 0) as total_spent
             FROM projects p
             LEFT JOIN project_transactions pt ON p.id = pt.project_id
             LEFT JOIN transactions t ON pt.transaction_id = t.id
@@ -1837,13 +1837,13 @@ async def get_project(project_id: int):
                 SUM(ABS(t.amount)) as total
             FROM project_transactions pt
             JOIN transactions t ON pt.transaction_id = t.id
-            WHERE pt.project_id = ? AND pt.status = 'accepted' AND t.amount < 0
+            WHERE pt.project_id = ? AND pt.status IN ('accepted', 'proposed') AND t.amount < 0
             GROUP BY t.category_group, t.category
             ORDER BY total DESC
         """, (project_id,)).fetchall()
         
         # Calculate stats (only count expenses, not income)
-        total_spent = sum(abs(float(tx[6])) for tx in transactions if tx[8] == 'accepted' and float(tx[6]) < 0)
+        total_spent = sum(abs(float(tx[6])) for tx in transactions if tx[8] in ('accepted', 'proposed') and float(tx[6]) < 0)
         
         conn.close()
         
