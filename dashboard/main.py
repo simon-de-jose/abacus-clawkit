@@ -245,6 +245,9 @@ async def get_transactions(
         where_clauses = []
         params = []
         
+        # Exclude transfers by default (credit card payments, internal moves)
+        where_clauses.append("(is_transfer IS NULL OR is_transfer = FALSE)")
+        
         if search:
             where_clauses.append("(description LIKE ? OR merchant LIKE ?)")
             params.extend([f"%{search}%", f"%{search}%"])

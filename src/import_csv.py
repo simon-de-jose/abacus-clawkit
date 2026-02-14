@@ -13,6 +13,31 @@ from parsers import boa
 from parsers import citi
 from categorizer import apply_categorization
 
+# Patterns that indicate a transaction is an internal transfer (credit card payment, etc.)
+TRANSFER_PATTERNS = [
+    'CHASE CREDIT CRD',
+    'AUTOPAY',
+    'APPLECARD GSBANK',
+    'AUTOMATIC PAYMENT - THANK',
+    'PAYMENT THANK YOU',
+]
+
+def is_transfer_transaction(txn: Dict) -> bool:
+    """Detect if a transaction is an internal transfer (credit card payment, etc.)"""
+    desc_upper = txn.get('description', '').upper()
+    txn_type = txn.get('type', '').lower()
+    
+    # Chase marks payments with type "Payment"
+    if txn_type == 'payment':
+        return True
+    
+    # Check description patterns
+    for pattern in TRANSFER_PATTERNS:
+        if pattern.upper() in desc_upper:
+            return True
+    
+    return False
+
 def detect_bank(file_path: str) -> str:
     """Auto-detect bank format from CSV headers"""
     if boa.detect(file_path):
@@ -126,6 +151,9 @@ def import_csv(file_path: str, bank: str = None) -> Dict:
         # Apply categorization
         txn = apply_categorization(conn, txn)
         
+        # Auto-detect transfers (credit card payments, etc.)
+        txn['is_transfer'] = is_transfer_transaction(txn)
+        
         # Generate transaction ID
         txn_id = calculate_transaction_id(txn, account_id)
         
@@ -140,12 +168,14 @@ def import_csv(file_path: str, bank: str = None) -> Dict:
             continue
         
         # Insert transaction
+        is_transfer = txn.get('is_transfer', False)
+        review_status = 'confirmed' if is_transfer else 'suggested'
         conn.execute("""
             INSERT INTO transactions (
                 id, transaction_date, post_date, description, merchant,
                 bank_category, category, category_group, type, amount,
-                account_id, memo, needs_review, file_hash
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                account_id, memo, needs_review, file_hash, is_transfer, review_status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             txn_id,
             txn['transaction_date'],
@@ -160,7 +190,9 @@ def import_csv(file_path: str, bank: str = None) -> Dict:
             account_id,
             txn['memo'],
             txn['needs_review'],
-            file_hash
+            file_hash,
+            is_transfer,
+            review_status,
         ))
         rows_imported += 1
     
