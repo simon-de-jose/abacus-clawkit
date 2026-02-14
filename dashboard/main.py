@@ -2401,10 +2401,22 @@ async def suggest_projects(request: SuggestProjectsRequest):
         # Count how many were created
         created_count = len([p for p in proposals if p['confidence'] >= request.min_confidence])
         
+        # Serialize date objects for JSON
+        serialized_proposals = []
+        for p in proposals:
+            sp = dict(p)
+            if 'start_date' in sp and sp['start_date']:
+                sp['start_date'] = str(sp['start_date'])
+            if 'end_date' in sp and sp['end_date']:
+                sp['end_date'] = str(sp['end_date'])
+            if 'transaction_ids' in sp:
+                sp['transaction_ids'] = list(sp['transaction_ids'])
+            serialized_proposals.append(sp)
+        
         return JSONResponse({
             "success": True,
             "created": created_count,
-            "proposals": proposals
+            "proposals": serialized_proposals
         })
     except Exception as e:
         print(f"Error in POST /api/projects/suggest: {e}")
