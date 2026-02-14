@@ -212,7 +212,7 @@ function createLineChart(elementId, categories, series, title) {
             textStyle: { fontSize: 16, fontWeight: 600, color: '#1A1A2E' }
         },
         tooltip: {
-            trigger: 'axis'
+            trigger: 'axis',
             confine: true,
         },
         legend: {
