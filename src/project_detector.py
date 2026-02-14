@@ -431,12 +431,22 @@ class ProjectDetector:
             start_date = period['start_date']
             end_date = period['end_date']
             
-            # Get all transactions during this period (excluding home merchants AND location-agnostic)
-            # Build exclusion conditions for location-agnostic merchants
+            # Get all transactions during this period
+            # Exclude: home merchants, location-agnostic merchants, and non-travel categories
+            # (property tax, insurance, utilities, etc. auto-charge during trips but aren't trip expenses)
             agnostic_exclusions = " AND ".join([
                 f"LOWER(merchant) NOT LIKE '%{merchant}%'"
                 for merchant in self.LOCATION_AGNOSTIC_MERCHANTS
             ])
+            
+            NON_TRAVEL_CATEGORIES = (
+                'Property Tax', 'Rent/Mortgage', 'Utilities', 'Home Maintenance', 'Home Services',
+                'Auto Insurance', 'Phone', 'Internet/Phone', 'Software', 'Subscriptions',
+                'Pet Food', 'Pet Supplies', 'Pet Insurance', 'Litter',
+                'Insurance', 'Pharmacy',
+                'Transfer', 'Payment',
+            )
+            non_travel_placeholders = ','.join(['?' for _ in NON_TRAVEL_CATEGORIES])
             
             trip_txns_query = f"""
                 SELECT id, merchant, description
@@ -445,9 +455,11 @@ class ProjectDetector:
                     AND amount < 0
                     AND (merchant IS NULL OR LOWER(merchant) NOT IN ({','.join(['?' for _ in home_merchants])}))
                     AND ({agnostic_exclusions})
+                    AND (category IS NULL OR category NOT IN ({non_travel_placeholders}))
+                    AND (category_group IS NULL OR category_group NOT IN ('Transfer', 'Home', 'Bills & Subscriptions', 'Pets', 'Health'))
             """
             
-            trip_txns = self.conn.execute(trip_txns_query, [start_date, end_date] + home_merchants).fetchall()
+            trip_txns = self.conn.execute(trip_txns_query, [start_date, end_date] + home_merchants + list(NON_TRAVEL_CATEGORIES)).fetchall()
             
             if len(trip_txns) < 3:
                 continue  # Not enough transactions for a trip
