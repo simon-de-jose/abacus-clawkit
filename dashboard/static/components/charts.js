@@ -21,17 +21,25 @@ const CHART_COLORS = [
 ];
 
 function createDonutChart(elementId, data, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    // Phase 4: Use SVG renderer on mobile for better performance
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
             text: title,
             left: 'center',
-            textStyle: { fontSize: 16, fontWeight: 600, color: '#1A1A2E' }
+            textStyle: { fontSize: isMobile ? 14 : 16, fontWeight: 600, color: '#1A1A2E' }
         },
         tooltip: {
             trigger: 'item',
-            formatter: '{b}: ${c} ({d}%)'
+            formatter: '{b}: ${c} ({d}%)',
+            // Phase 4: Larger tooltip trigger area on mobile
+            triggerOn: isMobile ? 'click' : 'mousemove|click',
+            padding: isMobile ? 12 : 10,
+            textStyle: { fontSize: isMobile ? 13 : 12 }
         },
         grid: {
             bottom: 50
@@ -41,8 +49,10 @@ function createDonutChart(elementId, data, title) {
             bottom: 5,
             left: 'center',
             padding: [5, 20],
-            textStyle: { fontSize: 11 },
-            itemGap: 15
+            // Phase 4: Reduce legend density on mobile
+            textStyle: { fontSize: isMobile ? 10 : 11 },
+            itemGap: isMobile ? 10 : 15,
+            type: isMobile ? 'scroll' : 'plain'
         },
         series: [{
             type: 'pie',
@@ -77,20 +87,26 @@ function createDonutChart(elementId, data, title) {
 }
 
 function createBarChart(elementId, categories, data, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
             text: title,
             left: 'center',
-            textStyle: { fontSize: 16, fontWeight: 600, color: '#1A1A2E' }
+            textStyle: { fontSize: isMobile ? 14 : 16, fontWeight: 600, color: '#1A1A2E' }
         },
         tooltip: {
             trigger: 'axis',
             axisPointer: { type: 'shadow' },
             formatter: (params) => {
                 return `${params[0].name}<br/>${params[0].marker} $${params[0].value.toFixed(2)}`;
-            }
+            },
+            triggerOn: isMobile ? 'click' : 'mousemove|click',
+            padding: isMobile ? 12 : 10,
+            textStyle: { fontSize: isMobile ? 13 : 12 }
         },
         grid: {
             left: '3%',
@@ -101,7 +117,12 @@ function createBarChart(elementId, categories, data, title) {
         xAxis: {
             type: 'category',
             data: categories,
-            axisLabel: { rotate: 45, fontSize: 11 }
+            // Phase 4: Reduce label density on mobile
+            axisLabel: { 
+                rotate: 45, 
+                fontSize: isMobile ? 10 : 11,
+                interval: isMobile ? 'auto' : 0
+            }
         },
         yAxis: {
             type: 'value',
@@ -124,7 +145,10 @@ function createBarChart(elementId, categories, data, title) {
 }
 
 function createStackedBarChart(elementId, categories, series, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
@@ -169,7 +193,10 @@ function createStackedBarChart(elementId, categories, series, title) {
 }
 
 function createLineChart(elementId, categories, series, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
@@ -214,7 +241,10 @@ function createLineChart(elementId, categories, series, title) {
 }
 
 function createSankeyChart(elementId, nodes, links, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
@@ -258,7 +288,10 @@ function createSankeyChart(elementId, nodes, links, title) {
 }
 
 function createHorizontalBarChart(elementId, categories, data, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
@@ -304,7 +337,10 @@ function createHorizontalBarChart(elementId, categories, data, title) {
 }
 
 function createStackedAreaChart(elementId, categories, series, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {
@@ -353,7 +389,10 @@ function createStackedAreaChart(elementId, categories, series, title) {
 }
 
 function createDonutWithCenterLabel(elementId, data, centerLabel, title) {
-    const chart = echarts.init(document.getElementById(elementId));
+    const isMobile = window.innerWidth < 768;
+    const chart = echarts.init(document.getElementById(elementId), null, {
+        renderer: isMobile ? 'svg' : 'canvas'
+    });
     
     const option = {
         title: {

@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>Transactions — Abacus</title>
     <link rel="stylesheet" href="/static/styles.css">
 </head>
@@ -15,7 +17,10 @@
 
         <!-- Filters -->
         <div class="card" style="margin-bottom: 1.5rem;">
-            <div class="filters">
+            <button class="filter-toggle-btn" id="filter-toggle" onclick="toggleFilters()">
+                Filters
+            </button>
+            <div class="filters" id="filters">
                 <input type="search" id="search" placeholder="Search transactions...">
                 <select id="category-filter">
                     <option value="">All Categories</option>
@@ -29,6 +34,7 @@
 
         <!-- Transactions Table -->
         <div class="card">
+            <!-- Desktop table view -->
             <div class="table-wrapper">
                 <table>
                     <thead>
@@ -46,6 +52,11 @@
                 </table>
             </div>
 
+            <!-- Mobile card view -->
+            <div class="mobile-transaction-list" id="mobile-transactions-list">
+                <div class="loading">Loading...</div>
+            </div>
+
             <div id="pagination-container"></div>
         </div>
     </div>
@@ -55,6 +66,19 @@
     <script>
         let currentPage = 1;
         let currentFilters = {};
+        
+        // Phase 3: Toggle filters on mobile
+        function toggleFilters() {
+            const filters = document.getElementById('filters');
+            const toggleBtn = document.getElementById('filter-toggle');
+            filters.classList.toggle('collapsed');
+            toggleBtn.classList.toggle('active');
+        }
+        
+        // Initialize filters as collapsed on mobile
+        if (window.innerWidth < 768) {
+            document.getElementById('filters').classList.add('collapsed');
+        }
 
         // Load categories for filter dropdown
         fetch('/api/categories')
@@ -95,6 +119,16 @@
                             loadTransactions(currentPage); // Reload after category change
                         });
                         tbody.appendChild(row);
+                    });
+                    
+                    // Phase 3: Also populate mobile card view
+                    const mobileList = document.getElementById('mobile-transactions-list');
+                    mobileList.innerHTML = '';
+                    data.transactions.forEach(txn => {
+                        const card = createMobileTransactionCard(txn, () => {
+                            loadTransactions(currentPage);
+                        });
+                        mobileList.appendChild(card);
                     });
 
                     // Update pagination
