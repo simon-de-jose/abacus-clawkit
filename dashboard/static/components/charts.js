@@ -71,7 +71,7 @@ function createDonutChart(elementId, data, title) {
             labelLine: { show: false },
             emphasis: {
                 label: {
-                    show: true,
+                    show: !isMobile,
                     position: 'center',
                     fontSize: isMobile ? 12 : 14,
                     fontWeight: 'bold',
@@ -446,7 +446,7 @@ function createDonutWithCenterLabel(elementId, data, centerLabel, title) {
             labelLine: { show: false },
             emphasis: {
                 label: {
-                    show: true,
+                    show: !isMobile,
                     position: 'center',
                     fontSize: isMobile ? 12 : 14,
                     fontWeight: 'bold',
