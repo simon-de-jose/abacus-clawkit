@@ -12,8 +12,18 @@ from datetime import datetime, date
 from typing import Optional, List, Dict
 from calendar import monthrange
 
-# Add parent src directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Use scripts from the skill repo (~/clawd/skills/abacus/scripts/)
+# Falls back to local src/ if running in legacy mode
+import os
+
+_skill_scripts = Path(os.path.expanduser("~/clawd/skills/abacus/scripts"))
+_legacy_src = Path(__file__).parent.parent / "src"
+
+if _skill_scripts.exists():
+    sys.path.insert(0, str(_skill_scripts))
+elif _legacy_src.exists():
+    sys.path.insert(0, str(_legacy_src))
+
 from config import get_db_path
 
 app = FastAPI(title="Abacus Dashboard")
@@ -2090,6 +2100,43 @@ async def remove_transaction_from_project(project_id: int, transaction_id: str):
         return JSONResponse({"success": True})
     except Exception as e:
         print(f"Error in DELETE /api/projects/{project_id}/transactions/{transaction_id}: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/transactions/projects")
+async def get_transaction_projects(transaction_ids: str):
+    """Get project assignments for multiple transactions"""
+    try:
+        conn = get_db()
+        ids_list = [id.strip() for id in transaction_ids.split(',') if id.strip()]
+        
+        if not ids_list:
+            conn.close()
+            return JSONResponse({"assignments": {}})
+        
+        placeholders = ','.join(['?' for _ in ids_list])
+        results = conn.execute(f"""
+            SELECT pt.transaction_id, p.id, p.name, p.color, pt.status
+            FROM project_transactions pt
+            JOIN projects p ON pt.project_id = p.id
+            WHERE pt.transaction_id IN ({placeholders})
+            AND pt.status IN ('accepted', 'proposed')
+            ORDER BY pt.transaction_id, p.name
+        """, ids_list).fetchall()
+        conn.close()
+        
+        assignments = {id: [] for id in ids_list}
+        for txn_id, proj_id, name, color, status in results:
+            assignments[txn_id].append({
+                "project_id": proj_id,
+                "project_name": name,
+                "color": color,
+                "status": status
+            })
+        
+        return JSONResponse({"assignments": assignments})
+    except Exception as e:
+        print(f"Error in /api/transactions/projects: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

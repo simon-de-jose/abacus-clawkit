@@ -426,6 +426,113 @@
             padding: 3rem;
             color: var(--gray-text);
         }
+
+        /* Project pills in transaction actions */
+        .project-pills {
+            display: inline-flex;
+            flex-wrap: wrap;
+            gap: 0.375rem;
+        }
+
+        .project-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            padding: 0.375rem 0.75rem;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: default;
+        }
+
+        .project-pill-remove {
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 0.25rem;
+            font-size: 1rem;
+            line-height: 1;
+            opacity: 0.5;
+            transition: opacity 0.2s;
+        }
+
+        .project-pill-remove:hover {
+            opacity: 1;
+        }
+
+        .btn-add-project {
+            padding: 0.375rem 0.75rem;
+            border: 1px dashed var(--gray-border);
+            border-radius: 8px;
+            background: transparent;
+            font-size: 0.8rem;
+            color: var(--gray-text);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-add-project:hover {
+            border-color: var(--coral);
+            color: var(--coral);
+            background: rgba(255, 107, 107, 0.05);
+        }
+
+        /* Project picker (reuses category picker card styles) */
+        .project-picker-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .project-picker-overlay.active {
+            display: flex;
+        }
+
+        .project-pick-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .project-pick-item:hover {
+            background: var(--gray-bg);
+        }
+
+        .project-pick-color {
+            width: 4px;
+            height: 36px;
+            border-radius: 2px;
+            flex-shrink: 0;
+        }
+
+        .project-pick-info {
+            flex: 1;
+        }
+
+        .project-pick-name {
+            font-weight: 600;
+            color: var(--navy);
+            font-size: 0.9rem;
+        }
+
+        .project-pick-meta {
+            font-size: 0.75rem;
+            color: var(--gray-text);
+        }
+
+        .project-pick-assigned {
+            color: var(--green);
+            font-weight: 600;
+        }
     </style>
 </head>
 <body data-page="Review">
@@ -492,6 +599,18 @@
     <div class="toast" id="toast">
         <span id="toast-message"></span>
         <button class="toast-action" id="toast-action">Undo</button>
+    </div>
+
+    <!-- Project Picker Modal -->
+    <div class="project-picker-overlay" id="project-picker-overlay">
+        <div class="category-picker">
+            <div class="category-picker-header">
+                <input type="text" class="category-search" id="project-search" placeholder="🔍 Search projects...">
+            </div>
+            <div class="category-picker-body" id="project-picker-body">
+                <div class="loading">Loading projects...</div>
+            </div>
+        </div>
     </div>
 
     <script src="/static/components/sidebar.js"></script>
@@ -572,6 +691,8 @@
                                     <span>${getCategoryIcon(category)}</span>
                                     <span>${category}</span>
                                 </div>
+                                <div class="project-pills" data-transaction-id="${txn.id}"></div>
+                                <button class="btn-add-project" data-id="${txn.id}">+ Project</button>
                                 ${isLikelyTransfer ? '<span class="transfer-hint">🔄 Likely transfer</span>' : ''}
                                 <button class="btn-mark-transfer" data-id="${txn.id}">Mark Transfer</button>
                             </div>
@@ -596,6 +717,16 @@
                 btn.addEventListener('click', async (e) => {
                     const txnId = e.currentTarget.dataset.id;
                     await markAsTransfer(txnId);
+                });
+            });
+            
+            // Load and render project assignments
+            loadAndRenderProjectBadges();
+            
+            // Attach project button listeners
+            document.querySelectorAll('.btn-add-project').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    openProjectPicker(e.currentTarget.dataset.id);
                 });
             });
         }
@@ -853,6 +984,139 @@
             document.getElementById('progress-text').textContent = `${reviewed} reviewed • ${stats.pending} remaining`;
         }
 
+        // Project state
+        let projectAssignments = {};
+        let allProjects = null;
+        let currentProjectTxnId = null;
+
+        async function loadAndRenderProjectBadges() {
+            const txnIds = transactions.map(t => t.id);
+            if (txnIds.length === 0) return;
+            
+            try {
+                const res = await fetch(`/api/transactions/projects?transaction_ids=${encodeURIComponent(txnIds.join(','))}`);
+                const data = await res.json();
+                projectAssignments = data.assignments;
+                
+                txnIds.forEach(id => renderProjectPills(id));
+            } catch (err) {
+                console.error('Failed to load project assignments:', err);
+            }
+        }
+
+        function renderProjectPills(txnId) {
+            const container = document.querySelector(`.project-pills[data-transaction-id="${txnId}"]`);
+            if (!container) return;
+            
+            const assignments = projectAssignments[txnId] || [];
+            container.innerHTML = assignments.map(proj => `
+                <span class="project-pill" style="background: ${proj.color}20; color: ${proj.color}; border-left: 3px solid ${proj.color};">
+                    ${escapeHtml(proj.project_name)}
+                    <button class="project-pill-remove" onclick="removeFromProject(event, '${txnId}', ${proj.project_id})">×</button>
+                </span>
+            `).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function removeFromProject(event, txnId, projectId) {
+            event.stopPropagation();
+            try {
+                const res = await fetch(`/api/projects/${projectId}/transactions/${txnId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    projectAssignments[txnId] = (projectAssignments[txnId] || []).filter(p => p.project_id !== projectId);
+                    renderProjectPills(txnId);
+                    showToast('Removed from project', null);
+                }
+            } catch (err) {
+                console.error('Failed to remove from project:', err);
+            }
+        }
+
+        async function openProjectPicker(txnId) {
+            currentProjectTxnId = txnId;
+            
+            if (!allProjects) {
+                try {
+                    const res = await fetch('/api/projects?status=active');
+                    const data = await res.json();
+                    allProjects = data.projects;
+                } catch (err) {
+                    console.error('Failed to load projects:', err);
+                    return;
+                }
+            }
+            
+            renderProjectPicker();
+            document.getElementById('project-picker-overlay').classList.add('active');
+            setTimeout(() => document.getElementById('project-search').focus(), 100);
+        }
+
+        function renderProjectPicker(filter = '') {
+            const body = document.getElementById('project-picker-body');
+            const filterLower = filter.toLowerCase();
+            const currentAssignments = projectAssignments[currentProjectTxnId] || [];
+            const assignedIds = new Set(currentAssignments.map(p => p.project_id));
+            
+            const filtered = allProjects.filter(p => p.name.toLowerCase().includes(filterLower));
+            
+            if (filtered.length === 0) {
+                body.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--gray-text);">No projects found</div>';
+                return;
+            }
+            
+            body.innerHTML = filtered.map(proj => `
+                <div class="project-pick-item" data-project-id="${proj.id}" onclick="assignToProject(${proj.id})">
+                    <div class="project-pick-color" style="background: ${proj.color};"></div>
+                    <div class="project-pick-info">
+                        <div class="project-pick-name">${escapeHtml(proj.name)}</div>
+                        <div class="project-pick-meta">${proj.transaction_count || 0} transactions</div>
+                    </div>
+                    ${assignedIds.has(proj.id) ? '<span class="project-pick-assigned">✓</span>' : ''}
+                </div>
+            `).join('');
+        }
+
+        async function assignToProject(projectId) {
+            const txnId = currentProjectTxnId;
+            
+            const current = projectAssignments[txnId] || [];
+            if (current.some(p => p.project_id === projectId)) {
+                showToast('Already assigned to this project', null);
+                document.getElementById('project-picker-overlay').classList.remove('active');
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/projects/${projectId}/transactions`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ transaction_ids: [txnId] })
+                });
+                
+                if (res.ok) {
+                    const proj = allProjects.find(p => p.id === projectId);
+                    if (!projectAssignments[txnId]) projectAssignments[txnId] = [];
+                    projectAssignments[txnId].push({
+                        project_id: proj.id,
+                        project_name: proj.name,
+                        color: proj.color,
+                        status: 'accepted'
+                    });
+                    
+                    renderProjectPills(txnId);
+                    document.getElementById('project-picker-overlay').classList.remove('active');
+                    showToast(`Added to ${proj.name}`, null);
+                }
+            } catch (err) {
+                console.error('Failed to assign to project:', err);
+            }
+        }
+
         // Event listeners
         document.getElementById('confirm-btn').addEventListener('click', confirmSelected);
         
@@ -869,10 +1133,23 @@
             }
         });
         
+        // Project search
+        document.getElementById('project-search').addEventListener('input', (e) => {
+            renderProjectPicker(e.target.value);
+        });
+        
+        // Close project picker on overlay click
+        document.getElementById('project-picker-overlay').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                e.currentTarget.classList.remove('active');
+            }
+        });
+        
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 document.getElementById('category-picker-overlay').classList.remove('active');
+                document.getElementById('project-picker-overlay').classList.remove('active');
             }
         });
 
